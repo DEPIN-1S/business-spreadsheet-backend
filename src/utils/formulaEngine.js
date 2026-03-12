@@ -69,8 +69,8 @@ function resolveCellRefs(expr, cellMap) {
 
 // Safe numeric evaluator (no eval) using Function constructor with strict whitelist check
 function safeEval(expr) {
-    // Allow only safe characters: digits, operators, parens, spaces, dots, quotes, commas
-    const safe = /^[\d\s+\-*/().,<>=!"&|?:'"a-zA-Z_]+$/.test(expr);
+    // Allow only safe characters: digits, operators, parens, spaces, dots, quotes, commas, modulo
+    const safe = /^[\d\s+\-*/%().,<>=!"&|?:'"a-zA-Z_]+$/.test(expr);
     if (!safe) throw new Error(`Unsafe formula expression: ${expr}`);
     try {
         // eslint-disable-next-line no-new-func
@@ -124,6 +124,14 @@ export function evaluate(formula, cellMap = {}) {
         return vals.length;
     });
 
+    // --- CONVERT_CURRENCY(value, fromCode, toCode, rate) ---
+    expr = expr.replace(/CONVERT_CURRENCY\(([^)]+)\)/g, (_, args) => {
+        const parts = splitArgs(args);
+        const value = parseFloat(resolveCellRefs(parts[0].trim(), cellMap)) || 0;
+        const rate = parseFloat(resolveCellRefs(parts[3].trim(), cellMap)) || 1;
+        return value * rate;
+    });
+
     // --- CONCAT(a, b, ...) ---
     expr = expr.replace(/CONCAT\(([^)]+)\)/g, (_, args) => {
         const parts = args.split(",").map(a => {
@@ -175,4 +183,36 @@ function splitArgs(str) {
     return args;
 }
 
-export default { evaluate };
+/**
+ * Resolve column name references in a formula to A1-notation cell refs.
+ * E.g. for formula "=test+test2", columns [{name:"test", idx:0}, {name:"test2", idx:1}], rowIndex 0
+ *   → "=A1+B1"
+ *
+ * @param {string} formula    - raw formula string e.g. "=test+test2%10"
+ * @param {Array}  columns    - array of { name, colLetter } where colLetter is the A/B/C letter
+ * @param {number} rowNumber  - 1-based row number
+ * @returns {string} formula with column names replaced by cell refs
+ */
+export function resolveColumnNames(formula, columns, rowNumber) {
+    if (!formula) return formula;
+
+    let result = formula;
+
+    // Sort columns by name length descending to avoid partial matches
+    // e.g. "test2" should be replaced before "test"
+    const sorted = [...columns].sort((a, b) => b.name.length - a.name.length);
+
+    for (const col of sorted) {
+        // Case-insensitive replacement of column name with cell ref
+        const regex = new RegExp(escapeRegExp(col.name), "gi");
+        result = result.replace(regex, `${col.colLetter}${rowNumber}`);
+    }
+
+    return result;
+}
+
+function escapeRegExp(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export default { evaluate, resolveColumnNames };

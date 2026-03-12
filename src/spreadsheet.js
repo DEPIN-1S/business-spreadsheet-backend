@@ -10,7 +10,7 @@ import { initSocket } from "./config/socket.js";
 // Import associations BEFORE sync so all FK/join constraints are registered
 import "./config/associations.js";
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 6043;
 const httpServer = http.createServer(app);
 
 // Boot Socket.IO

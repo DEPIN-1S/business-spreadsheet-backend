@@ -33,16 +33,20 @@ export const schemas = {
     createSheet: Joi.object({
         name: Joi.string().min(1).max(200).required(),
         description: Joi.string().allow("", null),
+        folderId: Joi.string().uuid().allow(null),
         settings: Joi.object().default({})
     }),
 
     createColumn: Joi.object({
         name: Joi.string().min(1).max(100).required(),
-        type: Joi.string().valid("text", "number", "date", "dropdown", "formula", "file").default("text"),
+        type: Joi.string().valid("text", "number", "date", "dropdown", "formula", "file", "currency", "fx", "image", "video", "multi_image", "comment").default("text"),
         order: Joi.number().integer().min(0).default(0),
+        orderIndex: Joi.number().integer().min(0),
+        width: Joi.number().integer().min(20),
         options: Joi.array().default([]),
         validationRules: Joi.object().default({}),
-        formulaExpr: Joi.string().allow(null, "")
+        formulaExpr: Joi.string().allow(null, ""),
+        currencyCode: Joi.string().valid("INR","USD","EUR","GBP","AED","SAR","CAD","AUD","SGD").allow(null, "")
     }),
 
     updateCell: Joi.object({
@@ -55,6 +59,15 @@ export const schemas = {
         canEdit: Joi.boolean().default(false),
         canEditFormulas: Joi.boolean().default(false),
         restrictedColumns: Joi.array().items(Joi.string().uuid()).default([])
+    }),
+
+    shareSheet: Joi.object({
+        email: Joi.string().email().required(),
+        role: Joi.string().valid("viewer", "editor", "admin").default("viewer")
+    }),
+
+    updateShareRole: Joi.object({
+        role: Joi.string().valid("viewer", "editor", "admin").required()
     }),
 
     createRoom: Joi.object({

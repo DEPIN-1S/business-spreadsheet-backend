@@ -5,6 +5,30 @@ import AppError from "../../utils/AppError.js";
 import { getFileType } from "../../middleware/upload.js";
 import { logAction } from "../../utils/auditLogger.js";
 
+export const uploadMultipleFiles = async (req, res, next) => {
+    try {
+        if (!req.files || req.files.length === 0) throw new AppError("No files uploaded", 400);
+        
+        const uploadedMedia = [];
+        
+        for (const file of req.files) {
+            const fileUrl = `/uploads/${getFileType(file.mimetype)}s/${file.filename}`;
+            const media = await MediaFile.create({
+                uploadedBy: req.user.id,
+                fileType: getFileType(file.mimetype),
+                mimeType: file.mimetype,
+                fileUrl,
+                originalName: file.originalname,
+                sizeBytes: file.size
+            });
+            uploadedMedia.push(media);
+            await logAction(req.user.id, "media", media.id, "create", null, { fileUrl, originalName: file.originalname }, req);
+        }
+        
+        res.status(201).json({ data: uploadedMedia, message: `${uploadedMedia.length} files uploaded` });
+    } catch (e) { next(e); }
+};
+
 export const uploadFile = async (req, res, next) => {
     try {
         if (!req.file) throw new AppError("No file uploaded", 400);
