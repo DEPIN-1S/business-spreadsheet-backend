@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { Op } from "sequelize";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import User from "./user.model.js";
@@ -149,6 +150,31 @@ export const getAll = async (req, res, next) => {
       order: [["createdAt", "DESC"]]
     });
     res.json({ data: rows, meta: getMeta(page, limit, count) });
+  } catch (e) { next(e); }
+};
+
+// ── Search users (Authenticated, all roles) ───────────────────────────────────
+
+export const searchUsers = async (req, res, next) => {
+  try {
+    const { q, limit = 20 } = req.query;
+    const where = { isActive: true };
+    
+    if (q) {
+      where[Op.or] = [
+        { name: { [Op.like]: `%${q}%` } },
+        { email: { [Op.like]: `%${q}%` } }
+      ];
+    }
+    
+    const users = await User.findAll({
+      where,
+      limit: parseInt(limit, 10),
+      attributes: ["id", "name", "email", "avatar", "role"], // Safe fields
+      order: [["name", "ASC"]]
+    });
+    
+    res.json({ data: users });
   } catch (e) { next(e); }
 };
 

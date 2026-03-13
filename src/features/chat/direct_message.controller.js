@@ -9,7 +9,7 @@ import { Op } from "sequelize";
 export const sendDirectMessage = async (req, res, next) => {
     try {
         const senderId = req.user.id;
-        const { receiverId } = req.params;
+        const receiverId = req.params.userId;
         const { message, fileType = "text", duration } = req.body;
 
         if (senderId === receiverId) throw new AppError("Cannot send message to yourself", 400);
