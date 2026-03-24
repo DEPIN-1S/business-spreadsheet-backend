@@ -45,6 +45,10 @@ app.use("/api/user/login", rateLimit({
     message: { error: "Too many login attempts. Try again in 15 minutes." }
 }));
 
+app.get("/", (req, res) => {
+  res.send("Spreadsheet backend is running");
+});
+
 // ── Body parsing ──────────────────────────────────────────────────────────────
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
