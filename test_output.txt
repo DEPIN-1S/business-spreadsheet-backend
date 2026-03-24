@@ -1,0 +1,40 @@
+﻿
+=== PERCENTAGE FORMULA FIX TESTS ===
+
+--- Percentage Increase ---
+  Γ£à sr*(1+pr/100) with pr='10%': =A1*(1+B1/100) => 1100
+  Γ£à sr*(1+pr/100) with pr='10': =A1*(1+B1/100) => 1100
+  Γ£à sr+pr absolute: =A1+B1 => 1050
+
+--- Division by Zero ---
+  Γ£à A1/B1 where B1=0: =A1/B1 => 0
+  Γ£à A1/(B1-B1) zero denominator: =A1/(B1-B1) => 0
+
+--- NaN Protection ---
+  Γ£à A1+B1 where A1 is non-numeric: =A1+B1 => 10
+
+--- SUM with Percentages ---
+  Γ£à SUM of percentage cells: =SUM(A1:A3) => 60
+
+--- Inline % Operator ---
+  Γ£à Inline 50%: =50% => 0.5
+  Γ£à Inline A1 * 10%: =A1*10% => 20
+
+--- Currency + Percentage ---
+  Γ£à Currency sr*(1+pr/100): =A1*(1+B1/100) => 1100
+
+--- Edge Cases ---
+  Γ£à Zero base, zero rate: =A1*(1+B1/100) => 0
+  Γ£à sr + sr*pr/100 alternative formula: =A1+A1*B1/100 => 1100
+  Γ£à sr + sr*pr/100 with pr='10%': =A1+A1*B1/100 => 1100
+
+--- Consistency Across Rows ---
+  Γ£à Row 1: sr=500, pr=10: =A1*(1+B1/100) => 550
+  Γ£à Row 2: sr=1000, pr=20: =A1*(1+B1/100) => 1200
+  Γ£à Row 3: sr=2000, pr=5: =A1*(1+B1/100) => 2100
+  Γ£à Row 4: sr=750, pr=15: =A1*(1+B1/100) => 862.5
+
+========================================
+Results: 17 passed, 0 failed out of 17
+========================================
+

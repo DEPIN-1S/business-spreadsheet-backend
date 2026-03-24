@@ -81,7 +81,7 @@ export function topoSort(graph) {
     allNodes.forEach(n => inDegree.set(n, 0));
     allNodes.forEach(n => {
         graph.get(n).forEach(dep => {
-            inDegree.set(n, (inDegree.get(n) || 0) + 1);
+            inDegree.set(dep, (inDegree.get(dep) || 0) + 1);
         });
     });
 

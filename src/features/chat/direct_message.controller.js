@@ -17,12 +17,11 @@ export const sendDirectMessage = async (req, res, next) => {
         const receiver = await User.findByPk(receiverId, { attributes: ["id", "name", "avatar"] });
         if (!receiver) throw new AppError("Receiver not found", 404);
 
-        // fileUrl comes either from multipart upload or body (external URL)
-        const fileUrl = req.file
-            ? `/uploads/audio/${req.file.filename}`
-            : (req.body.fileUrl || null);
+        // fileUrl comes from body (set by sendFileMessage), multipart upload, or external URL
+        const fileUrl = req.body.fileUrl
+            || (req.file ? `/uploads/audio/${req.file.filename}` : null);
 
-        const resolvedFileType = req.file ? "audio" : fileType;
+        const resolvedFileType = req.body.fileType || (req.file ? "audio" : fileType);
 
         if (!message && !fileUrl) throw new AppError("Message or file is required", 400);
 
@@ -158,6 +157,32 @@ export const sendAudioMessage = async (req, res, next) => {
     try {
         if (!req.file) throw new AppError("Audio file is required", 400);
         // Reuse sendDirectMessage logic — req.file already set by multer
+        return sendDirectMessage(req, res, next);
+    } catch (e) { next(e); }
+};
+
+// ── Send file/image message (upload handler) ──────────────────────────────────
+export const sendFileMessage = async (req, res, next) => {
+    try {
+        if (!req.file) throw new AppError("File is required", 400);
+
+        // Determine fileType from MIME
+        const mime = req.file.mimetype || "";
+        if (mime.startsWith("image/")) {
+            req.body.fileType = "image";
+        } else {
+            req.body.fileType = "file";
+        }
+
+        // Set fileUrl manually (sendDirectMessage checks req.file for audio only)
+        req.body.fileUrl = `/uploads/dm-files/${req.file.filename}`;
+        req.body.fileName = req.file.originalname;
+
+        // Store original filename in message if no text message provided
+        if (!req.body.message) {
+            req.body.message = req.file.originalname;
+        }
+
         return sendDirectMessage(req, res, next);
     } catch (e) { next(e); }
 };

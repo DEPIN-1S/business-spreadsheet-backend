@@ -24,7 +24,31 @@ export const createSheet = async (req, res, next) => {
       const folder = await Folder.findOne({ where: { id: folderId, isDeleted: false } });
       if (!folder) throw new AppError("Folder not found", 404);
     }
-    const sheet = await Spreadsheet.create({ name, description, folderId: folderId || null, settings, createdBy: req.user.id });
+
+    let sheet;
+    await sequelize.transaction(async (t) => {
+      // 1. Create the spreadsheet
+      sheet = await Spreadsheet.create(
+        { name, description, folderId: folderId || null, settings, createdBy: req.user.id },
+        { transaction: t }
+      );
+
+      // 2. Auto-create 3 default columns
+      const defaultColumns = [
+        { spreadsheetId: sheet.id, name: "Column 1", type: "text", orderIndex: 0 },
+        { spreadsheetId: sheet.id, name: "Column 2", type: "text", orderIndex: 1 },
+        { spreadsheetId: sheet.id, name: "Column 3", type: "text", orderIndex: 2 },
+      ];
+      await Column.bulkCreate(defaultColumns, { transaction: t });
+
+      // 3. Auto-create 10 empty rows
+      const defaultRows = Array.from({ length: 10 }, (_, i) => ({
+        spreadsheetId: sheet.id,
+        order: i,
+      }));
+      await Row.bulkCreate(defaultRows, { transaction: t });
+    });
+
     await logAction(req.user.id, "sheet", sheet.id, "create", null, { name, folderId }, req);
     res.status(201).json({ data: sheet, message: "Spreadsheet created" });
   } catch (e) { next(e); }
@@ -139,7 +163,7 @@ export const duplicateSheet = async (req, res, next) => {
 export const shareSheet = async (req, res, next) => {
   try {
     const { id: spreadsheetId } = req.params;
-    const { email, role = "viewer", allowedColumnIds } = req.body;
+    const { email, role = "viewer", columnAccess } = req.body;
 
     const sheet = await Spreadsheet.findOne({ where: { id: spreadsheetId, isDeleted: false } });
     if (!sheet) throw new AppError("Spreadsheet not found", 404);
@@ -156,14 +180,14 @@ export const shareSheet = async (req, res, next) => {
       { userId: user.id, spreadsheetId, role, canView, canEdit, canEditFormulas, restrictedColumns: [], invitedBy: req.user.id },
       { returning: true }
     );
-
-    // Upsert column-level privacy if allowedColumnIds specified
-    if (allowedColumnIds !== undefined) {
-      await ColumnPermission.upsert({ userId: user.id, sheetId: spreadsheetId, allowedColumnIds });
+    
+    // Upsert column-level permissions if specified
+    if (columnAccess !== undefined) {
+      await ColumnPermission.upsert({ userId: user.id, sheetId: spreadsheetId, columnAccess });
     }
 
     await logAction(req.user.id, "permission", spreadsheetId, created ? "create" : "update", null,
-      { userId: user.id, role, canView, canEdit, allowedColumnIds }, req);
+      { userId: user.id, role, canView, canEdit, columnAccess }, req);
 
     res.status(created ? 201 : 200).json({ data: Array.isArray(perm) ? perm[0] : perm, message: "Sheet shared" });
   } catch (e) { next(e); }

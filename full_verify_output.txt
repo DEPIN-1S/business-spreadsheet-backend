@@ -1,0 +1,87 @@
+﻿
+========================================
+  FULL END-TO-END VERIFICATION
+========================================
+
+STEP 1: Login
+  [PASS] Login successful
+
+STEP 2: Create new document
+  [PASS] Sheet created
+  Sheet ID: b7010a8a-b834-46d3-ae72-83d2cd64427c
+
+STEP 3: Verify auto-created 3 columns + 10 rows
+  [PASS] 3 columns auto-created
+  [PASS] Column 1 name = 'Column 1'
+  [PASS] Column 2 name = 'Column 2'
+  [PASS] Column 3 name = 'Column 3'
+  [PASS] Column 1 type = 'text'
+  [PASS] 10 rows auto-created
+  [PASS] Row 1 has 3 cells
+  [PASS] Row 2 has 3 cells
+  [PASS] Row 3 has 3 cells
+  [PASS] Row 4 has 3 cells
+  [PASS] Row 5 has 3 cells
+  [PASS] Row 6 has 3 cells
+  [PASS] Row 7 has 3 cells
+  [PASS] Row 8 has 3 cells
+  [PASS] Row 9 has 3 cells
+  [PASS] Row 10 has 3 cells
+  [PASS] All cells have columnId
+
+STEP 4: Update columns to sr, pr, result (formula)
+  [PASS] Column 1 updated to 'sr' (number)
+  [PASS] Column 2 updated to 'pr' (number)
+  [PASS] Column 3 updated to 'result' (formula: =sr*(1+pr/100))
+
+STEP 5: Fill 10 rows with test data
+  Row 1: sr=1000, pr=10
+  Row 2: sr=2000, pr=20
+  Row 3: sr=500, pr=15
+  Row 4: sr=1500, pr=5
+  Row 5: sr=3000, pr=25
+  Row 6: sr=0, pr=10
+  Row 7: sr=1000, pr=0
+  Row 8: sr=5000, pr=12.5
+  Row 9: sr=100, pr=100
+  Row 10: sr=10000, pr=7
+
+STEP 6: Verify formula calculations
+
+  +-----+-------+------+----------+----------+--------+
+  | Row |   sr  |  pr  | Expected |  Actual  | Status |
+  +-----+-------+------+----------+----------+--------+
+  |  1  |  1000 |   10 |     1100 |     1100 | PASS   |
+  |  2  |  2000 |   20 |     2400 |     2400 | PASS   |
+  |  3  |   500 |   15 |      575 |      575 | PASS   |
+  |  4  |  1500 |    5 |     1575 |     1575 | PASS   |
+  |  5  |  3000 |   25 |     3750 |     3750 | PASS   |
+  |  6  |     0 |   10 |        0 |        0 | PASS   |
+  |  7  |  1000 |    0 |     1000 |     1000 | PASS   |
+  |  8  |  5000 | 12.5 |     5625 |     5625 | PASS   |
+  |  9  |   100 |  100 |      200 |      200 | PASS   |
+  | 10  | 10000 |    7 |    10700 |    10700 | PASS   |
+  +-----+-------+------+----------+----------+--------+
+
+STEP 7: Verify structure integrity
+  [PASS] Still 3 columns
+  [PASS] Column 1 is 'sr'
+  [PASS] Column 2 is 'pr'
+  [PASS] Column 3 is 'result'
+  [PASS] Column 3 type is 'formula'
+  [PASS] Still 10 rows
+
+========================================
+  TOTAL: 38 passed, 0 failed
+========================================
+
+  EVERYTHING WORKS CORRECTLY!
+
+  - New document auto-creates 3 columns + 10 rows
+  - Columns can be renamed and typed
+  - Formula =sr*(1+pr/100) calculates correctly
+  - Zero values handled (no division by zero)
+  - Decimal percentages work (12.5% etc)
+  - 100% increase works correctly
+  - All 10 rows consistent
+

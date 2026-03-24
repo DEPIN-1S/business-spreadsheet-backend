@@ -1,0 +1,49 @@
+﻿
+=== SETUP: Create Test Spreadsheet ===
+
+1. Logging in as superadmin...
+   Logged in successfully.
+
+2. Creating spreadsheet 'Percentage Test'...
+   Sheet ID: 24ffeb7e-bf76-4e97-a237-92ac82b88482
+
+3. Adding 3 columns...
+   Column 'sr'     ID: 72ffa293-cae8-4ee6-a564-760306d1db24
+   Column 'pr'     ID: e654e000-c77f-40c1-affe-c7deb7e89111
+   Column 'result' ID: 8cde6e90-c50f-483e-ad47-822ee97bde28
+
+4. Adding 10 rows with test data...
+   Row 1: sr=1000, pr=10 (rowId: 8e062761-a8f4-4995-be07-a3efc3ac47f2)
+   Row 2: sr=2000, pr=20 (rowId: 029262d6-92e1-45f3-b61b-0210daaa2878)
+   Row 3: sr=500, pr=15 (rowId: aa2ee985-7cea-43d2-b819-7c9388bf385c)
+   Row 4: sr=1500, pr=5 (rowId: 8119bc00-381b-4425-9e1a-e4b180b1423d)
+   Row 5: sr=3000, pr=25 (rowId: d3bf0756-265d-4145-9c77-7bf75920bf17)
+   Row 6: sr=750, pr=8 (rowId: 7d396bb6-80bc-4653-b8ec-5fc35f6ee94c)
+   Row 7: sr=100, pr=50 (rowId: bb735f64-a2c7-4803-9c56-2a55fd9a39e7)
+   Row 8: sr=5000, pr=12 (rowId: 9476c63a-7253-4b5b-bf5b-7736ebd02000)
+   Row 9: sr=250, pr=30 (rowId: 0c3ac661-df2c-4a76-a4a9-c2b0bb3dfbaf)
+   Row 10: sr=10000, pr=7 (rowId: 2818927d-683f-4d5e-a4c4-2b5d45df0133)
+
+5. Fetching sheet data to verify formula results...
+
+   +-------+-------+------+----------+----------+--------+
+   |  Row  |   sr  |  pr  | Expected |  Actual  | Status |
+   +-------+-------+------+----------+----------+--------+
+   |   1   |  1000 |   10 |     1100 |     1100 | PASS   |
+   |   2   |  2000 |   20 |     2400 |     2400 | PASS   |
+   |   3   |   500 |   15 |      575 |      575 | PASS   |
+   |   4   |  1500 |    5 |     1575 |     1575 | PASS   |
+   |   5   |  3000 |   25 |     3750 |     3750 | PASS   |
+   |   6   |   750 |    8 |      810 |      810 | PASS   |
+   |   7   |   100 |   50 |      150 |      150 | PASS   |
+   |   8   |  5000 |   12 | 5600.000000000001 |     5600 | PASS   |
+   |   9   |   250 |   30 |      325 |      325 | PASS   |
+   |  10   | 10000 |    7 |    10700 |    10700 | PASS   |
+   +-------+-------+------+----------+----------+--------+
+
+   ALL 10 ROWS CORRECT! Formula =sr*(1+pr/100) works perfectly.
+
+
+Sheet URL: http://localhost:5173 (open and navigate to 'Percentage Test')
+Sheet ID:  24ffeb7e-bf76-4e97-a237-92ac82b88482
+

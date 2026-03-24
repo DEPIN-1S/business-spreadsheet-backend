@@ -4,6 +4,7 @@ import Row from "./row.model.js";
 import Cell from "./cell.model.js";
 import SheetPermission from "./permission.model.js";
 import ColumnPermission from "./column_permission.model.js";
+import Folder from "./folder.model.js";
 import { evaluate, resolveColumnNames } from "../../utils/formulaEngine.js";
 import { parseCurrencyInput, formatCurrencyValue } from "../../utils/currencyHelpers.js";
 import { buildGraph, checkCircular, topoSort } from "../../utils/dependencyGraph.js";
@@ -12,6 +13,8 @@ import AppError from "../../utils/AppError.js";
 import { getPagination, getMeta } from "../../utils/pagination.js";
 import { getIO } from "../../config/socket.js";
 import { Op } from "sequelize";
+import logger from "../../config/logger.js";
+import User from "../user/user.model.js";
 import sequelize from "../../config/db.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -65,19 +68,30 @@ export const getSheetData = async (req, res, next) => {
             order: [["orderIndex", "ASC"]]
         });
 
-        // Column privacy filtering for staff
+        // Column privacy and permission mapping
+        let columnPermissionsMap = {}; // { colId: 'edit' | 'view' }
         if (role === "staff") {
-            const colPerm = await ColumnPermission.findOne({ where: { userId, sheetId: spreadsheetId } });
-            if (colPerm && colPerm.allowedColumnIds?.length) {
-                columns = columns.filter(c => colPerm.allowedColumnIds.includes(c.id));
+            const colPerm = await ColumnPermission.findOne({ where: { userId, spreadsheetId } });
+            if (colPerm && colPerm.columnAccess) {
+                columnPermissionsMap = typeof colPerm.columnAccess === 'string' 
+                    ? JSON.parse(colPerm.columnAccess) 
+                    : colPerm.columnAccess;
+                // Filter columns to only those explicitly granted 'view' or 'edit'
+                columns = columns.filter(c => columnPermissionsMap[c.id]);
+            } else {
+                // If no ColumnPermission record, staff can see nothing (secure by default)
+                // Actually, if we want "all columns" by default if shared generally, we should check SheetPermission.
+                // For now, let's stick to the user's intent: sharing specific columns.
+                columns = [];
             }
+        } else {
+            // Admin/SuperAdmin see all and can edit all
+            columns.forEach(c => { columnPermissionsMap[c.id] = 'edit'; });
         }
 
         const { count: totalRows, rows } = await Row.findAndCountAll({
             where: { spreadsheetId, isDeleted: false },
-            order: [["order", "ASC"]],
-            limit,
-            offset
+            order: [["order", "ASC"]]
         });
 
         const rowIds = rows.map(r => r.id);
@@ -106,6 +120,7 @@ export const getSheetData = async (req, res, next) => {
                     columnId: col.id,
                     columnName: col.name,
                     columnType: col.type,
+                    permission: columnPermissionsMap[col.id] || 'view', // 'edit' or 'view'
                     rawValue: cell?.rawValue ?? null,
                     formattedValue: fValue,
                     computedValue: cell?.computedValue ?? null,
@@ -117,7 +132,14 @@ export const getSheetData = async (req, res, next) => {
         }));
 
         res.json({
-            data: { sheet, columns, grid },
+            data: { 
+                sheet: {
+                    ...sheet.toJSON(),
+                    userPermission: (role === 'admin' || role === 'superadmin') ? 'admin' : (req.sheetPermission?.role || 'viewer')
+                }, 
+                columns, 
+                grid 
+            },
             meta: getMeta(page, limit, totalRows)
         });
     } catch (e) { next(e); }
@@ -138,13 +160,31 @@ export const updateCell = async (req, res, next) => {
         if (!cell) throw new AppError("Cell not found", 404);
 
         const oldValue = cell.rawValue;
-        const col = await Column.findByPk(cell.columnId);
+        const columnId = cell.columnId;
+        const col = await Column.findByPk(columnId);
+        
+        // Granular permission check for staff
+        if (req.user.role === "staff") {
+            const colPerm = await ColumnPermission.findOne({ where: { userId: req.user.id, spreadsheetId } });
+            if (!colPerm) throw new AppError("You do not have permission to edit this column", 403);
+            
+            const access = typeof colPerm.columnAccess === 'string' ? JSON.parse(colPerm.columnAccess) : (colPerm.columnAccess || {});
+            if (access[columnId] !== 'edit') {
+                throw new AppError("You do not have permission to edit this column", 403);
+            }
+        }
         
         let finalRaw = rawValue;
         let finalFormatted = formattedValue ?? rawValue;
         if (col.type === "currency") {
             finalRaw = parseCurrencyInput(rawValue);
             finalFormatted = formatCurrencyValue(parseFloat(finalRaw), currencyCode || cell.currencyCode || col.currencyCode);
+        } else if (col.type === "date" && rawValue) {
+            const d = new Date(rawValue);
+            if (!isNaN(d.getTime())) {
+                finalRaw = d.toISOString().slice(0, 10);
+                finalFormatted = d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+            }
         }
 
         if (col?.validationRules) validateCellValue(finalRaw, col);
@@ -183,6 +223,17 @@ export const upsertCell = async (req, res, next) => {
         const { rowId, columnId, rawValue, fileUrl, formattedValue, currencyCode } = req.body;
         const { id: spreadsheetId } = req.params;
 
+        // Granular permission check for staff
+        if (req.user.role === "staff") {
+            const colPerm = await ColumnPermission.findOne({ where: { userId: req.user.id, spreadsheetId } });
+            if (!colPerm) throw new AppError("You do not have permission to edit this column", 403);
+            
+            const access = typeof colPerm.columnAccess === 'string' ? JSON.parse(colPerm.columnAccess) : (colPerm.columnAccess || {});
+            if (access[columnId] !== 'edit') {
+                throw new AppError("You do not have permission to edit this column", 403);
+            }
+        }
+
         const col = await Column.findByPk(columnId);
         
         let finalRaw = rawValue;
@@ -190,6 +241,12 @@ export const upsertCell = async (req, res, next) => {
         if (col.type === "currency") {
             finalRaw = parseCurrencyInput(rawValue);
             finalFormatted = formatCurrencyValue(parseFloat(finalRaw), currencyCode || col.currencyCode);
+        } else if (col.type === "date" && rawValue) {
+            const d = new Date(rawValue);
+            if (!isNaN(d.getTime())) {
+                finalRaw = d.toISOString().slice(0, 10);
+                finalFormatted = d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+            }
         }
 
         if (col?.validationRules) validateCellValue(finalRaw, col);
@@ -267,14 +324,18 @@ export async function recalculateFormulas(spreadsheetId) {
                 // Convert column names in formula to A1-refs for this specific row
                 const resolvedFormula = resolveColumnNames(col.formulaExpr, colInfoForResolve, rowNum);
 
-                const computed = evaluate(resolvedFormula, cellMap);
+                const rawComputed = evaluate(resolvedFormula, cellMap);
+                // Guard: ensure computed value is safe before storing
+                const computed = (rawComputed === null || rawComputed === undefined ||
+                    (typeof rawComputed === "number" && !isFinite(rawComputed)))
+                    ? 0 : rawComputed;
                 const currencyCodePayload = col.currencyCode ? { currencyCode: col.currencyCode } : {};
                 
                 const [updatedCell] = await Cell.upsert({
                     rowId: row.id,
                     columnId: col.id,
                     rawValue: col.formulaExpr,
-                    computedValue: String(computed ?? ""),
+                    computedValue: String(computed),
                     updatedBy: null,
                     ...currencyCodePayload
                 }, { returning: true });
@@ -282,14 +343,14 @@ export async function recalculateFormulas(spreadsheetId) {
                 // Update cellMap so dependent formulas in the same row can use this result
                 const colLetter = colLetterMap[col.id];
                 if (colLetter) {
-                    cellMap[`${colLetter}${rowNum}`] = String(computed ?? "");
+                    cellMap[`${colLetter}${rowNum}`] = String(computed);
                 }
 
                 updatedCells.push({
                     cellId: Array.isArray(updatedCell) ? updatedCell[0]?.id : updatedCell?.id,
                     columnId: col.id,
                     rowId: row.id,
-                    computedValue: String(computed ?? "")
+                    computedValue: String(computed)
                 });
             } catch (err) {
                 await Cell.upsert({
@@ -317,6 +378,12 @@ function validateCellValue(value, col) {
     if (col.type === "dropdown" && value) {
         const opts = col.options || [];
         if (opts.length && !opts.includes(value)) throw new AppError(`"${value}" is not a valid option for column "${col.name}"`, 422);
+    }
+    if (col.type === "date" && value !== "" && value !== null) {
+        const d = new Date(value);
+        if (isNaN(d.getTime())) {
+            throw new AppError(`Column "${col.name}" requires a valid date (YYYY-MM-DD)`, 422);
+        }
     }
     if (col.type === "multi_image" && value) {
         try {
@@ -422,5 +489,375 @@ export const bulkInsertRows = async (req, res, next) => {
 
         await recalculateFormulas(spreadsheetId);
         res.status(201).json({ data: createdRows, message: `${createdRows.length} rows inserted` });
+    } catch (e) { next(e); }
+};
+
+// ── List User Sheets (Owned + Shared) ────────────────────────────────────────
+export const listSheets = async (req, res, next) => {
+    try {
+        const { id: userId, role } = req.user;
+        const { page, limit, offset } = getPagination(req);
+        const { folderId, shared } = req.query;
+
+        let whereSpreadsheet = { isDeleted: false };
+        if (folderId) whereSpreadsheet.folderId = folderId;
+
+        if (shared === "true") {
+            // Only shared with me
+            const perms = await SheetPermission.findAll({ where: { userId }, attributes: ["spreadsheetId", "role"] });
+            const sharedIds = perms.map(p => p.spreadsheetId);
+            whereSpreadsheet.id = sharedIds;
+            whereSpreadsheet.createdBy = { [Op.ne]: userId }; // Exclude owned
+        } else if (role !== "superadmin" && role !== "admin") {
+            // For normal users, "My Files" means owned by them
+            whereSpreadsheet.createdBy = userId;
+        }
+
+        const { rows, count } = await Spreadsheet.findAndCountAll({
+            where: whereSpreadsheet,
+            limit, offset,
+            order: [["createdAt", "DESC"]],
+            include: [{ model: User, as: "creator", attributes: ["id", "name", "email", "avatar"] }]
+        });
+
+        // Add role info if shared
+        const sheetPermissions = await SheetPermission.findAll({ where: { userId }, attributes: ["spreadsheetId", "role"] });
+        const permMap = {};
+        sheetPermissions.forEach(p => { permMap[p.spreadsheetId] = p.role; });
+
+        const data = rows.map(sheet => ({
+            ...sheet.toJSON(),
+            permissionRole: sheet.createdBy === userId ? "owner" : (permMap[sheet.id] || "viewer")
+        }));
+
+        res.json({ data, meta: getMeta(page, limit, count) });
+    } catch (e) { next(e); }
+};
+
+// ── Sharing & Permissions ─────────────────────────────────────────────────────
+
+export const shareSheet = async (req, res, next) => {
+    try {
+        const { id: spreadsheetId } = req.params;
+        const { email, role = "viewer", columnAccess } = req.body;
+        logger.info(`[DEBUG] shareSheet: sheetId=${spreadsheetId}, email=${email}, role=${role}, hasColumnAccess=${columnAccess !== undefined}`);
+
+        const sheet = await Spreadsheet.findOne({ where: { id: spreadsheetId, isDeleted: false } });
+        if (!sheet) throw new AppError("Spreadsheet not found", 404);
+
+        const user = await User.findOne({ where: { email } });
+        if (!user) throw new AppError("User not found", 404);
+
+        const canView = true;
+        const canEdit = role === "editor" || role === "admin";
+        const canEditFormulas = role === "admin";
+
+        const [perm, created] = await SheetPermission.upsert(
+            { userId: user.id, spreadsheetId, role, canView, canEdit, canEditFormulas, restrictedColumns: [], invitedBy: req.user.id },
+            { returning: true }
+        );
+        logger.info(`[DEBUG] SheetPermission upserted: ${created ? 'created' : 'updated'}`);
+
+        if (columnAccess !== undefined) {
+            logger.info(`[DEBUG] Upserting ColumnPermission for user=${user.id}, sheet=${spreadsheetId}`);
+            const [cp, cpCreated] = await ColumnPermission.upsert(
+                { userId: user.id, spreadsheetId, columnAccess },
+                { returning: true }
+            );
+            logger.info(`[DEBUG] ColumnPermission upserted: ${cpCreated ? 'created' : 'updated'}`);
+        }
+
+        await logAction(req.user.id, "permission", spreadsheetId, created ? "create" : "update", null,
+            { userId: user.id, role, canView, canEdit, columnAccess }, req, { spreadsheetId });
+
+        res.status(created ? 201 : 200).json({ data: Array.isArray(perm) ? perm[0] : perm, message: "Sheet shared" });
+    } catch (e) { 
+        logger.error(`[DEBUG] shareSheet FAILED: ${e.message}`);
+        next(e); 
+    }
+};
+
+export const updateShareRole = async (req, res, next) => {
+    try {
+        const { id: spreadsheetId, userId } = req.params;
+        const { role } = req.body;
+        const perm = await SheetPermission.findOne({ where: { spreadsheetId, userId } });
+        if (!perm) throw new AppError("Permission not found", 404);
+
+        const canView = true;
+        const canEdit = role === "editor" || role === "admin";
+        const canEditFormulas = role === "admin";
+
+        await perm.update({ role, canView, canEdit, canEditFormulas });
+        await logAction(req.user.id, "permission", spreadsheetId, "update_role", { oldRole: perm.role }, { userId, role }, req, { spreadsheetId });
+        res.json({ message: "Share role updated", data: perm });
+    } catch (e) { next(e); }
+};
+
+export const removeShare = async (req, res, next) => {
+    try {
+        const { id: spreadsheetId, userId } = req.params;
+        const perm = await SheetPermission.findOne({ where: { spreadsheetId, userId } });
+        if (!perm) throw new AppError("Permission not found", 404);
+        await perm.destroy();
+        await ColumnPermission.destroy({ where: { sheetId: spreadsheetId, userId } });
+        await logAction(req.user.id, "permission", spreadsheetId, "delete", perm.toJSON(), null, req, { spreadsheetId });
+        res.json({ message: "Access removed" });
+    } catch (e) { next(e); }
+};
+
+export const getSharedWithMe = async (req, res, next) => {
+    try {
+        const { page, limit, offset } = getPagination(req);
+        const perms = await SheetPermission.findAll({ where: { userId: req.user.id } });
+        const sheetIds = perms.map(p => p.spreadsheetId);
+        const { rows, count } = await Spreadsheet.findAndCountAll({
+            where: { id: sheetIds, isDeleted: false },
+            limit, offset, order: [["createdAt", "DESC"]],
+            include: [{ model: User, as: "creator", attributes: ["id", "name", "email", "avatar"] }]
+        });
+        const data = rows.map(sheet => {
+            const p = perms.find(perm => perm.spreadsheetId === sheet.id);
+            return { ...sheet.toJSON(), permissionRole: p ? p.role : "viewer" };
+        });
+        res.json({ data, meta: getMeta(page, limit, count) });
+    } catch (e) { next(e); }
+};
+
+export const listPermissions = async (req, res, next) => {
+    try {
+        const spreadsheetId = req.params.id;
+        logger.info(`[DEBUG] Fetching permissions for spreadsheetId: ${spreadsheetId}`);
+        const perms = await SheetPermission.findAll({
+            where: { spreadsheetId },
+            include: [{ model: User, attributes: ["id", "name", "email", "role", "avatar"] }]
+        });
+        const colPerms = await ColumnPermission.findAll({ where: { spreadsheetId } });
+        
+        const parsedColPerms = colPerms.map(cp => {
+            const json = cp.toJSON();
+            if (typeof json.columnAccess === 'string') {
+                try { json.columnAccess = JSON.parse(json.columnAccess); } catch(e){}
+            }
+            return json;
+        });
+
+        logger.info(`[DEBUG] Found ${perms.length} sheet permissions, ${colPerms.length} column permissions`);
+        res.json({ data: { sheetPermissions: perms, columnPermissions: parsedColPerms } });
+    } catch (e) { next(e); }
+};
+
+export const setPermission = shareSheet;
+
+// ── Spreadsheet & Column Management ──────────────────────────────────────────
+
+export const createSheet = async (req, res, next) => {
+    try {
+        const { name, description, folderId, settings } = req.body;
+        if (folderId) {
+            const folder = await Folder.findOne({ where: { id: folderId, isDeleted: false } });
+            if (!folder) throw new AppError("Folder not found", 404);
+        }
+        let sheet;
+        await sequelize.transaction(async (t) => {
+            sheet = await Spreadsheet.create({ name, description, folderId: folderId || null, settings, createdBy: req.user.id }, { transaction: t });
+            const defaultColumns = [
+                { spreadsheetId: sheet.id, name: "Column 1", type: "text", orderIndex: 0 },
+                { spreadsheetId: sheet.id, name: "Column 2", type: "text", orderIndex: 1 },
+                { spreadsheetId: sheet.id, name: "Column 3", type: "text", orderIndex: 2 },
+            ];
+            await Column.bulkCreate(defaultColumns, { transaction: t });
+            const defaultRows = Array.from({ length: 10 }, (_, i) => ({ spreadsheetId: sheet.id, order: i }));
+            await Row.bulkCreate(defaultRows, { transaction: t });
+        });
+        await logAction(req.user.id, "sheet", sheet.id, "create", null, { name, folderId }, req, { spreadsheetId: sheet.id });
+        res.status(201).json({ data: sheet, message: "Spreadsheet created" });
+    } catch (e) { next(e); }
+};
+
+export const getSheet = async (req, res, next) => {
+    try {
+        const sheet = await Spreadsheet.findOne({ where: { id: req.params.id, isDeleted: false } });
+        if (!sheet) throw new AppError("Spreadsheet not found", 404);
+        const columns = await Column.findAll({ where: { spreadsheetId: sheet.id, isDeleted: false }, order: [["orderIndex", "ASC"]] });
+        res.json({ data: { sheet, columns } });
+    } catch (e) { next(e); }
+};
+
+export const updateSheet = async (req, res, next) => {
+    try {
+        const sheet = await Spreadsheet.findOne({ where: { id: req.params.id, isDeleted: false } });
+        if (!sheet) throw new AppError("Spreadsheet not found", 404);
+        const old = { name: sheet.name, description: sheet.description, folderId: sheet.folderId };
+        await sheet.update(req.body);
+        await logAction(req.user.id, "sheet", sheet.id, "update", old, req.body, req, { spreadsheetId: sheet.id });
+        const io = getIO();
+        if (io) io.to(`sheet:${sheet.id}`).emit("column_updated", { action: "sheet_updated", sheetId: sheet.id });
+        res.json({ data: sheet, message: "Spreadsheet updated" });
+    } catch (e) { next(e); }
+};
+
+export const deleteSheet = async (req, res, next) => {
+    try {
+        const sheet = await Spreadsheet.findOne({ where: { id: req.params.id, isDeleted: false } });
+        if (!sheet) throw new AppError("Spreadsheet not found", 404);
+        await sheet.update({ isDeleted: true });
+        await logAction(req.user.id, "sheet", sheet.id, "delete", null, null, req, { spreadsheetId: sheet.id });
+        res.json({ message: "Spreadsheet deleted" });
+    } catch (e) { next(e); }
+};
+
+export const duplicateSheet = async (req, res, next) => {
+    try {
+        const original = await Spreadsheet.findOne({ where: { id: req.params.id, isDeleted: false } });
+        if (!original) throw new AppError("Spreadsheet not found", 404);
+        let newSheet;
+        await sequelize.transaction(async (t) => {
+            newSheet = await Spreadsheet.create({ name: `${original.name} (Copy)`, description: original.description, folderId: original.folderId, settings: original.settings, createdBy: req.user.id }, { transaction: t });
+            const columns = await Column.findAll({ where: { spreadsheetId: original.id, isDeleted: false }, order: [["orderIndex", "ASC"]] });
+            const columnMap = {};
+            for (const col of columns) {
+                const newCol = await Column.create({ spreadsheetId: newSheet.id, name: col.name, type: col.type, orderIndex: col.orderIndex, defaultValue: col.defaultValue, alignment: col.alignment, width: col.width, textColor: col.textColor, bgColor: col.bgColor, options: col.options, validationRules: col.validationRules, formulaExpr: col.formulaExpr, currencyCode: col.currencyCode }, { transaction: t });
+                columnMap[col.id] = newCol;
+            }
+            const rows = await Row.findAll({ where: { spreadsheetId: original.id, isDeleted: false }, order: [["order", "ASC"]] });
+            for (const row of rows) {
+                const newRow = await Row.create({ spreadsheetId: newSheet.id, order: row.order, rowColor: row.rowColor, height: row.height }, { transaction: t });
+                const cells = await Cell.findAll({ where: { rowId: row.id } });
+                const newCells = cells.map(cell => ({ rowId: newRow.id, columnId: columnMap[cell.columnId]?.id, rawValue: cell.rawValue, formattedValue: cell.formattedValue, computedValue: cell.computedValue, currencyCode: cell.currencyCode, fileUrl: cell.fileUrl, updatedBy: req.user.id })).filter(c => c.columnId);
+                if (newCells.length) await Cell.bulkCreate(newCells, { transaction: t });
+            }
+        });
+        await logAction(req.user.id, "sheet", newSheet.id, "create", null, { duplicatedFrom: req.params.id }, req, { spreadsheetId: newSheet.id });
+        res.status(201).json({ data: newSheet, message: "Sheet duplicated" });
+    } catch (e) { next(e); }
+};
+
+export const addColumn = async (req, res, next) => {
+    try {
+        const { id: spreadsheetId } = req.params;
+        if (req.body.formulaExpr) {
+            const cols = await Column.findAll({ where: { spreadsheetId, isDeleted: false } });
+            const graph = buildGraph([...cols.map(c => c.toJSON()), { id: "NEW", name: req.body.name, formulaExpr: req.body.formulaExpr }]);
+            checkCircular(graph, "NEW");
+        }
+        if (req.body.orderIndex === undefined) {
+            const maxOrder = await Column.max("orderIndex", { where: { spreadsheetId, isDeleted: false } });
+            req.body.orderIndex = (maxOrder ?? -1) + 1;
+        } else {
+            await Column.increment("orderIndex", { by: 1, where: { spreadsheetId, isDeleted: false, orderIndex: { [Op.gte]: req.body.orderIndex } } });
+        }
+        const col = await Column.create({ ...req.body, spreadsheetId });
+        if (col.formulaExpr) await recalculateFormulas(spreadsheetId);
+        await logAction(req.user.id, "column", col.id, "create", null, req.body, req, { spreadsheetId });
+        const io = getIO();
+        if (io) io.to(`sheet:${spreadsheetId}`).emit("column_updated", { action: "added", sheetId: spreadsheetId, column: col.toJSON() });
+        res.status(201).json({ data: col, message: "Column added" });
+    } catch (e) { next(e); }
+};
+
+export const updateColumn = async (req, res, next) => {
+    try {
+        const { id: spreadsheetId, colId } = req.params;
+        const col = await Column.findOne({ where: { id: colId, spreadsheetId, isDeleted: false } });
+        if (!col) throw new AppError("Column not found", 404);
+        const old = col.toJSON();
+        if (req.body.formulaExpr) {
+            const cols = await Column.findAll({ where: { spreadsheetId: col.spreadsheetId, isDeleted: false } });
+            const graph = buildGraph(cols.map(c => c.id === col.id ? { ...c.toJSON(), formulaExpr: req.body.formulaExpr } : c.toJSON()));
+            checkCircular(graph, col.id);
+        }
+        await col.update(req.body);
+        if (col.formulaExpr) await recalculateFormulas(col.spreadsheetId);
+        await logAction(req.user.id, "column", col.id, "update", old, req.body, req, { spreadsheetId });
+        const io = getIO();
+        if (io) io.to(`sheet:${col.spreadsheetId}`).emit("column_updated", { action: "updated", sheetId: col.spreadsheetId, column: col.toJSON() });
+        res.json({ data: col, message: "Column updated" });
+    } catch (e) { next(e); }
+};
+
+export const deleteColumn = async (req, res, next) => {
+    try {
+        const { id: spreadsheetId, colId } = req.params;
+        const col = await Column.findOne({ where: { id: colId, spreadsheetId, isDeleted: false } });
+        if (!col) throw new AppError("Column not found", 404);
+        await col.update({ isDeleted: true });
+        await logAction(req.user.id, "column", col.id, "delete", null, null, req, { spreadsheetId });
+        const io = getIO();
+        if (io) io.to(`sheet:${col.spreadsheetId}`).emit("column_updated", { action: "deleted", sheetId: col.spreadsheetId, columnId: col.id });
+        res.json({ message: "Column deleted" });
+    } catch (e) { next(e); }
+};
+
+export const moveColumnLeft = async (req, res, next) => {
+    try {
+        const { id: spreadsheetId, colId } = req.params;
+        const col = await Column.findOne({ where: { id: colId, spreadsheetId, isDeleted: false } });
+        if (!col) throw new AppError("Column not found", 404);
+        if (col.orderIndex === 0) throw new AppError("Column is already at the leftmost position", 400);
+        const prev = await Column.findOne({ where: { spreadsheetId, orderIndex: col.orderIndex - 1, isDeleted: false } });
+        if (!prev) throw new AppError("No column to the left", 400);
+        await sequelize.transaction(async (t) => {
+            await col.update({ orderIndex: prev.orderIndex }, { transaction: t });
+            await prev.update({ orderIndex: col.orderIndex }, { transaction: t });
+        });
+        const io = getIO();
+        if (io) io.to(`sheet:${spreadsheetId}`).emit("column_updated", { action: "reordered", sheetId: spreadsheetId });
+        res.json({ message: "Column moved left" });
+    } catch (e) { next(e); }
+};
+
+export const moveColumnRight = async (req, res, next) => {
+    try {
+        const { id: spreadsheetId, colId } = req.params;
+        const col = await Column.findOne({ where: { id: colId, spreadsheetId, isDeleted: false } });
+        if (!col) throw new AppError("Column not found", 404);
+        const next_ = await Column.findOne({ where: { spreadsheetId, orderIndex: col.orderIndex + 1, isDeleted: false } });
+        if (!next_) throw new AppError("No column to the right", 400);
+        await sequelize.transaction(async (t) => {
+            await col.update({ orderIndex: next_.orderIndex }, { transaction: t });
+            await next_.update({ orderIndex: col.orderIndex }, { transaction: t });
+        });
+        const io = getIO();
+        if (io) io.to(`sheet:${spreadsheetId}`).emit("column_updated", { action: "reordered", sheetId: spreadsheetId });
+        res.json({ message: "Column moved right" });
+    } catch (e) { next(e); }
+};
+
+export const reorderColumns = async (req, res, next) => {
+    try {
+        const { id: spreadsheetId } = req.params;
+        const { columns } = req.body;
+        if (!Array.isArray(columns)) throw new AppError("columns array required", 400);
+        await sequelize.transaction(async (t) => {
+            for (const { id, orderIndex } of columns) {
+                await Column.update({ orderIndex }, { where: { id, spreadsheetId }, transaction: t });
+            }
+        });
+        const io = getIO();
+        if (io) io.to(`sheet:${spreadsheetId}`).emit("column_updated", { action: "reordered", sheetId: spreadsheetId });
+        res.json({ message: "Columns reordered" });
+    } catch (e) { next(e); }
+};
+
+export const toggleColumnHidden = async (req, res, next) => {
+    try {
+        const { id: spreadsheetId, colId } = req.params;
+        const col = await Column.findOne({ where: { id: colId, spreadsheetId, isDeleted: false } });
+        if (!col) throw new AppError("Column not found", 404);
+        await col.update({ isHidden: !col.isHidden });
+        const io = getIO();
+        if (io) io.to(`sheet:${spreadsheetId}`).emit("column_updated", { action: "visibility_changed", sheetId: spreadsheetId, columnId: col.id, isHidden: col.isHidden });
+        res.json({ data: { isHidden: col.isHidden }, message: `Column ${col.isHidden ? "hidden" : "shown"}` });
+    } catch (e) { next(e); }
+};
+
+export const toggleColumnLocked = async (req, res, next) => {
+    try {
+        const { id: spreadsheetId, colId } = req.params;
+        const col = await Column.findOne({ where: { id: colId, spreadsheetId, isDeleted: false } });
+        if (!col) throw new AppError("Column not found", 404);
+        await col.update({ isLocked: !col.isLocked });
+        res.json({ data: { isLocked: col.isLocked }, message: `Column ${col.isLocked ? "locked" : "unlocked"}` });
     } catch (e) { next(e); }
 };

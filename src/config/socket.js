@@ -11,6 +11,12 @@ let io = null;
  */
 const sheetPresence = new Map();
 
+/**
+ * Online user tracking: Map<userId, Set<socketId>>
+ * Tracks all socket connections per user for accurate online/offline status.
+ */
+const onlineUsers = new Map();
+
 export function initSocket(httpServer) {
     io = new Server(httpServer, {
         cors: {
@@ -36,8 +42,19 @@ export function initSocket(httpServer) {
         logger.info(`Socket connected: ${socket.user?.name} (${socket.id})`);
 
         // ── Personal user room (for direct messages) ──────────────────────────
-        // Every user auto-joins their own room so DMs can be delivered instantly
         socket.join(`user:${socket.user.id}`);
+
+        // ── Track online status ──────────────────────────────────────────────
+        const uid = socket.user.id;
+        if (!onlineUsers.has(uid)) onlineUsers.set(uid, new Set());
+        onlineUsers.get(uid).add(socket.id);
+
+        // Broadcast "online" to all clients
+        io.emit("user_status", { userId: uid, name: socket.user.name, status: "online" });
+
+        // Send current online users list to the connecting client
+        const onlineList = [...onlineUsers.keys()];
+        socket.emit("online_users", onlineList);
 
         // DM typing indicator
         socket.on("dm_typing", ({ receiverId, isTyping }) => {
@@ -116,13 +133,27 @@ export function initSocket(httpServer) {
             io.emit("user_status", { userId: socket.user.id, name: socket.user.name, status });
         });
 
+        // Let clients request the online users list at any time
+        socket.on("get_online_users", () => {
+            socket.emit("online_users", [...onlineUsers.keys()]);
+        });
+
         socket.on("disconnect", () => {
             logger.info(`Socket disconnected: ${socket.user?.name}`);
             // Remove from all sheet presence maps
             for (const [sheetId] of sheetPresence) {
                 _leaveSheet(socket, sheetId);
             }
-            io.emit("user_status", { userId: socket.user?.id, name: socket.user?.name, status: "offline" });
+            // Remove from online tracking
+            const uid = socket.user?.id;
+            if (uid && onlineUsers.has(uid)) {
+                onlineUsers.get(uid).delete(socket.id);
+                // Only mark offline if no more sockets for this user
+                if (onlineUsers.get(uid).size === 0) {
+                    onlineUsers.delete(uid);
+                    io.emit("user_status", { userId: uid, name: socket.user?.name, status: "offline" });
+                }
+            }
         });
     });
 

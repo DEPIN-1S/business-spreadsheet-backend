@@ -1,5 +1,6 @@
 import SheetPermission from "../features/spreadsheet/permission.model.js";
 import AppError from "../utils/AppError.js";
+import logger from "../config/logger.js";
 
 /**
  * Check that the logged-in user has the required permission on a spreadsheet.
@@ -16,8 +17,19 @@ export const checkSheetPermission = (action = "view") => async (req, res, next) 
         const sheetId = req.params.id || req.params.sheetId;
         if (!sheetId) throw new AppError("Sheet ID missing", 400);
 
+        logger.info(`[DEBUG] checkSheetPermission START: action=${action}, userId=${userId}, sheetId=${sheetId}`);
         const perm = await SheetPermission.findOne({ where: { userId, spreadsheetId: sheetId } });
-        if (!perm) throw new AppError("No permission for this spreadsheet", 403);
+        
+        if (!perm) {
+            const allUserPerms = await SheetPermission.findAll({ where: { userId } });
+            logger.warn(`[DEBUG] No permission found for userId=${userId}, sheetId=${sheetId}. User has ${allUserPerms.length} total perms.`);
+            if (allUserPerms.length > 0) {
+                logger.warn(`[DEBUG] First available spreadsheetId for user: ${allUserPerms[0].spreadsheetId}`);
+            }
+            throw new AppError("No permission for this spreadsheet", 403);
+        }
+
+        logger.info(`[DEBUG] Found permission: canView=${perm.canView}, canEdit=${perm.canEdit}, role=${perm.role}`);
 
         if (action === "view" && !perm.canView) throw new AppError("View access denied", 403);
         if (action === "edit" && !perm.canEdit) throw new AppError("Edit access denied", 403);

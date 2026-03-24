@@ -64,8 +64,8 @@ SheetPermission.belongsTo(Spreadsheet, { foreignKey: "spreadsheetId" });
 // Column-level privacy
 User.hasMany(ColumnPermission, { foreignKey: "userId", as: "columnPermissions" });
 ColumnPermission.belongsTo(User, { foreignKey: "userId" });
-Spreadsheet.hasMany(ColumnPermission, { foreignKey: "sheetId", as: "columnPermissions" });
-ColumnPermission.belongsTo(Spreadsheet, { foreignKey: "sheetId" });
+Spreadsheet.hasMany(ColumnPermission, { foreignKey: "spreadsheetId", as: "columnPermissions" });
+ColumnPermission.belongsTo(Spreadsheet, { foreignKey: "spreadsheetId" });
 
 // ── Media Files ───────────────────────────────────────────────────────────────
 Cell.hasMany(MediaFile, { foreignKey: "cellId", as: "mediaFiles" });

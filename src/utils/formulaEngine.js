@@ -15,7 +15,33 @@
  *   =CONCAT(A1," ",B1)  string concat
  */
 
-// Resolve a range like "A1:A5" to an array of cell keys
+// Helper to safely extract numeric values from strings like "$100.00", "₹ 500", "1,000", "10.5%"
+function parseNumericValue(val) {
+    if (val === undefined || val === null || val === "") return null;
+    if (typeof val === "number") return val;
+    const strVal = String(val).trim();
+    
+    if (strVal === "") return null;
+    if (!isNaN(Number(strVal))) return Number(strVal);
+    
+    // Percentage e.g. 10%, 10.55 %
+    if (/^[-+]?[\d,]+(\.\d+)?\s*%$/.test(strVal)) {
+        const num = parseFloat(strVal.replace(/[^\d.-]/g, ''));
+        if (!isNaN(num)) return num;  // Return face value (10 for "10%"); use % operator in formula for /100
+    }
+    
+    // Currency / comma formatted (e.g. ₹100.00, $ 10, 1,000.50)
+    const isCurrencyOrFormatted = /^[-+]?[^\w\s+-]?\s*[\d,]+(\.\d+)?\s*[^\w\s+-]?$/.test(strVal);
+    if (isCurrencyOrFormatted) {
+        const cleaned = strVal.replace(/[^\d.-]/g, '');
+        const num = parseFloat(cleaned);
+        if (!isNaN(num)) return num;
+    }
+    
+    return null;
+}
+
+// Resolve a range like "A1:A5" to an array of cell numeric values
 function expandRange(range, cellMap) {
     const match = range.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
     if (!match) return [];
@@ -30,9 +56,9 @@ function expandRange(range, cellMap) {
     for (let r = startRow; r <= endRow; r++) {
         for (let c = startColNum; c <= endColNum; c++) {
             const key = `${colNumToLetter(c)}${r}`;
-            const val = cellMap[key];
-            if (val !== undefined && val !== null && val !== "") {
-                values.push(parseFloat(val));
+            const num = parseNumericValue(cellMap[key]);
+            if (num !== null) {
+                values.push(num);
             }
         }
     }
@@ -62,8 +88,9 @@ function resolveCellRefs(expr, cellMap) {
     return expr.replace(/\b([A-Z]+)(\d+)\b/g, (match) => {
         const val = cellMap[match];
         if (val === undefined || val === null || val === "") return "0";
-        const num = parseFloat(val);
-        return isNaN(num) ? `"${val}"` : String(num);
+        const num = parseNumericValue(val);
+        // Non-numeric values coerce to 0 in arithmetic to prevent NaN / string concat
+        return num !== null ? String(num) : "0";
     });
 }
 
@@ -74,7 +101,10 @@ function safeEval(expr) {
     if (!safe) throw new Error(`Unsafe formula expression: ${expr}`);
     try {
         // eslint-disable-next-line no-new-func
-        return Function(`"use strict"; return (${expr})`)();
+        const result = Function(`"use strict"; return (${expr})`)();
+        // Guard: division by zero produces Infinity, coerce to 0
+        if (typeof result === "number" && !isFinite(result)) return 0;
+        return result;
     } catch {
         throw new Error(`Cannot evaluate expression: ${expr}`);
     }
@@ -97,7 +127,7 @@ export function evaluate(formula, cellMap = {}) {
             const vals = expandRange(range.trim(), cellMap);
             return vals.reduce((a, b) => a + b, 0);
         }
-        return range.split(",").reduce((acc, r) => acc + (parseFloat(cellMap[r.trim()]) || 0), 0);
+        return range.split(",").reduce((acc, r) => acc + (parseNumericValue(cellMap[r.trim()]) || 0), 0);
     });
 
     // --- AVG(range) ---
@@ -153,11 +183,85 @@ export function evaluate(formula, cellMap = {}) {
         return condResult ? trueVal : falseVal;
     });
 
+    // --- TODAY() ---
+    expr = expr.replace(/TODAY\(\)/gi, () => {
+        return `"${new Date().toISOString().slice(0, 10)}"`;
+    });
+
+    // --- NOW() ---
+    expr = expr.replace(/NOW\(\)/gi, () => {
+        const d = new Date();
+        return `"${d.toISOString().slice(0, 10)} ${d.toTimeString().slice(0, 8)}"`;
+    });
+
+    // --- DATEDIFF(startDate, endDate) → number of days ---
+    expr = expr.replace(/DATEDIFF\(([^)]+)\)/gi, (_, args) => {
+        const parts = splitArgs(args);
+        if (parts.length < 2) return 0;
+        // Resolve cell refs directly from cellMap to preserve date strings
+        const resolveDate = (part) => {
+            const p = part.trim().replace(/"/g, '');
+            const cellRef = p.match(/^[A-Z]+\d+$/);
+            return cellRef ? (cellMap[p] ?? '') : p;
+        };
+        const d1Str = resolveDate(parts[0]);
+        const d2Str = resolveDate(parts[1]);
+        const ms = new Date(d2Str) - new Date(d1Str);
+        return isNaN(ms) ? 0 : Math.round(ms / 86400000);
+    });
+
+    // --- DATEADD(date, days) → new date string ---
+    expr = expr.replace(/DATEADD\(([^)]+)\)/gi, (_, args) => {
+        const parts = splitArgs(args);
+        if (parts.length < 2) return `""`;
+        // Resolve date from cellMap directly
+        const datePart = parts[0].trim().replace(/"/g, '');
+        const cellRef = datePart.match(/^[A-Z]+\d+$/);
+        const dateStr = cellRef ? (cellMap[datePart] ?? '') : datePart;
+        // Resolve days (can be a cell ref or number)
+        const daysPart = parts[1].trim().replace(/"/g, '');
+        const daysRef = daysPart.match(/^[A-Z]+\d+$/);
+        const days = parseFloat(daysRef ? (cellMap[daysPart] ?? 0) : daysPart) || 0;
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return `""`;
+        d.setDate(d.getDate() + days);
+        return `"${d.toISOString().slice(0, 10)}"`;
+    });
+
     // Resolve remaining cell refs
     expr = resolveCellRefs(expr, cellMap);
 
+    // Convert percentages within expressions: e.g. 10% -> (10/100)
+    expr = expr.replace(/(\d+(?:\.\d+)?)\s*%/g, '($1/100)');
+
+    // Convert (expr)% -> ((expr)/100)
+    while (expr.includes(")%")) {
+        const idx = expr.indexOf(")%");
+        let openIdx = -1;
+        let depth = 0;
+        for (let i = idx - 1; i >= 0; i--) {
+            if (expr[i] === ')') depth++;
+            else if (expr[i] === '(') {
+                if (depth === 0) { openIdx = i; break; }
+                depth--;
+            }
+        }
+        if (openIdx !== -1) {
+            expr = expr.substring(0, openIdx) + "((" + expr.substring(openIdx + 1, idx) + ")/100)" + expr.substring(idx + 2);
+        } else {
+            expr = expr.replace(")%", ")/100");
+        }
+    }
+
     // Final evaluation
-    const result = safeEval(expr);
+    let result = safeEval(expr);
+    if (typeof result === "number" && !isNaN(result)) {
+        // Fix JS floating point drift
+        result = parseFloat(result.toFixed(8));
+    } else if (typeof result === "number" && isNaN(result)) {
+        // Guard: NaN from invalid arithmetic → return 0
+        result = 0;
+    }
     return result;
 }
 
@@ -203,8 +307,12 @@ export function resolveColumnNames(formula, columns, rowNumber) {
     const sorted = [...columns].sort((a, b) => b.name.length - a.name.length);
 
     for (const col of sorted) {
-        // Case-insensitive replacement of column name with cell ref
-        const regex = new RegExp(escapeRegExp(col.name), "gi");
+        let colName = col.name.trim();
+        if (!colName) continue;
+        
+        // Use lookarounds instead of word boundaries (\b) to support special characters at borders
+        // This ensures "pr" does not replace inside "price"
+        const regex = new RegExp(`(?<=^|[^a-zA-Z0-9_])${escapeRegExp(colName)}(?=$|[^a-zA-Z0-9_])`, "gi");
         result = result.replace(regex, `${col.colLetter}${rowNumber}`);
     }
 

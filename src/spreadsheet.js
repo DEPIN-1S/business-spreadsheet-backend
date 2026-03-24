@@ -6,26 +6,23 @@ import app from "./app.js";
 import sequelize from "./config/db.js";
 import logger from "./config/logger.js";
 import { initSocket } from "./config/socket.js";
-
-// Import associations BEFORE sync so all FK/join constraints are registered
 import "./config/associations.js";
 
 const PORT = process.env.PORT || 6043;
 const httpServer = http.createServer(app);
 
-// Boot Socket.IO
 initSocket(httpServer);
 
 sequelize
-  .sync({ alter: true })   // alter=true: non-destructive schema migrations
+  .sync() // no alter here
   .then(() => {
-    logger.info("✅  Database synced");
+    logger.info("✅ Database synced");
     httpServer.listen(PORT, () => {
-      logger.info(`🚀  Server running on http://localhost:${PORT}`);
-      logger.info(`📡  Socket.IO ready`);
+      logger.info(`🚀 Server running on http://localhost:${PORT}`);
+      logger.info(`📡 Socket.IO ready`);
     });
   })
   .catch((err) => {
-    logger.error("❌  Database sync failed: " + err.message);
+    logger.error("❌ Database sync failed: " + err.message);
     process.exit(1);
   });
