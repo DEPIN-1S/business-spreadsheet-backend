@@ -89,9 +89,31 @@ export const getSheetData = async (req, res, next) => {
             columns.forEach(c => { columnPermissionsMap[c.id] = 'edit'; });
         }
 
+        const search = req.query.search;
+        let rowInclude = [];
+
+        if (search && search.trim().length > 0) {
+            const searchKeyword = search.trim();
+            rowInclude.push({
+                model: Cell,
+                as: 'cells',
+                attributes: [],
+                where: {
+                    [Op.or]: [
+                        { rawValue: { [Op.like]: `${searchKeyword}%` } },
+                        { computedValue: { [Op.like]: `${searchKeyword}%` } },
+                        { formattedValue: { [Op.like]: `${searchKeyword}%` } }
+                    ]
+                },
+                required: true // INNER JOIN to filter rows
+            });
+        }
+
         const { count: totalRows, rows } = await Row.findAndCountAll({
             where: { spreadsheetId, isDeleted: false },
-            order: [["order", "ASC"]]
+            order: [["order", "ASC"]],
+            include: rowInclude,
+            distinct: true
         });
 
         const rowIds = rows.map(r => r.id);
@@ -837,6 +859,99 @@ export const reorderColumns = async (req, res, next) => {
         const io = getIO();
         if (io) io.to(`sheet:${spreadsheetId}`).emit("column_updated", { action: "reordered", sheetId: spreadsheetId });
         res.json({ message: "Columns reordered" });
+    } catch (e) { next(e); }
+};
+
+// ── Export / Import ────────────────────────────────────────────────────────
+export const exportSheet = async (req, res, next) => {
+    try {
+        const { id: spreadsheetId } = req.params;
+        const sheet = await Spreadsheet.findOne({ where: { id: spreadsheetId } });
+        if (!sheet) throw new AppError("Spreadsheet not found", 404);
+
+        const columns = await Column.findAll({ where: { spreadsheetId } });
+        const rows = await Row.findAll({ where: { spreadsheetId } });
+        const cells = await Cell.findAll({ where: { rowId: rows.map(r => r.id) } });
+        const permissions = await ColumnPermission.findAll({ where: { spreadsheetId } });
+
+        const exportData = {
+            sheet, columns, rows, cells, permissions
+        };
+
+        res.setHeader("Content-Type", "application/json");
+        res.setHeader("Content-Disposition", `attachment; filename=backup_${sheet.name.replace(/\s+/g, '_')}.json`);
+        res.send(JSON.stringify(exportData, null, 2));
+
+        await logAction(req.user.id, "sheet", spreadsheetId, "export", null, null, req);
+    } catch (e) { next(e); }
+};
+
+export const importSheet = async (req, res, next) => {
+    try {
+        const { sheet, columns, rows, cells } = req.body;
+        if (!sheet || !columns || !rows || !cells) throw new AppError("Invalid backup file format", 400);
+
+        await sequelize.transaction(async (t) => {
+            // Create new sheet
+            const newSheet = await Spreadsheet.create({
+                name: `${sheet.name} (Restored)`,
+                createdBy: req.user.id,
+                folderId: req.body.folderId || null,
+                settings: sheet.settings,
+                isLocked: sheet.isLocked
+            }, { transaction: t });
+
+            // Create columns and map old IDs to new IDs
+            const colIdMap = {};
+            for (const col of columns) {
+                const newCol = await Column.create({
+                    spreadsheetId: newSheet.id,
+                    name: col.name,
+                    type: col.type,
+                    orderIndex: col.orderIndex,
+                    width: col.width,
+                    alignment: col.alignment,
+                    currencyCode: col.currencyCode,
+                    defaultValue: col.defaultValue,
+                    isHidden: col.isHidden,
+                    isProtected: col.isProtected,
+                    formulaExpr: col.formulaExpr
+                }, { transaction: t });
+                colIdMap[col.id] = newCol.id;
+            }
+
+            // Create rows and map old IDs to new IDs
+            const rowIdMap = {};
+            for (const row of rows) {
+                const newRow = await Row.create({
+                    spreadsheetId: newSheet.id,
+                    order: row.order,
+                    rowColor: row.rowColor,
+                    isLocked: row.isLocked
+                }, { transaction: t });
+                rowIdMap[row.id] = newRow.id;
+            }
+
+            // Reconstruct cells
+            const newCells = cells.map(cell => ({
+                rowId: rowIdMap[cell.rowId],
+                columnId: colIdMap[cell.columnId],
+                rawValue: cell.rawValue,
+                computedValue: cell.computedValue,
+                formattedValue: cell.formattedValue,
+                isFormula: cell.isFormula,
+                fileUrl: cell.fileUrl,
+                currencyCode: cell.currencyCode
+            })).filter(c => c.rowId && c.columnId);
+
+            if (newCells.length > 0) {
+                await Cell.bulkCreate(newCells, { transaction: t });
+            }
+
+            await logAction(req.user.id, "sheet", newSheet.id, "create", null, null, req, { note: "Restored from backup" });
+
+            res.status(201).json({ message: "Spreadsheet restored successfully", sheetId: newSheet.id });
+        });
     } catch (e) { next(e); }
 };
 

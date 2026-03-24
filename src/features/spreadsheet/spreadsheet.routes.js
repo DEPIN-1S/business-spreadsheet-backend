@@ -7,7 +7,8 @@ import {
     moveColumnLeft, moveColumnRight, reorderColumns,
     toggleColumnHidden, toggleColumnLocked,
     shareSheet, updateShareRole, removeShare, getSharedWithMe, setPermission, listPermissions,
-    createSheet, getSheet, deleteSheet, duplicateSheet
+    createSheet, getSheet, deleteSheet, duplicateSheet,
+    exportSheet, importSheet
 } from "./spreadsheet.controller.js";
 import { protect } from "../../middleware/auth.js";
 import { checkSheetPermission } from "../../middleware/rbac.js";
@@ -22,7 +23,9 @@ router.use(protect());
 router.get("/", listSheets); // Unified listing
 router.get("/shared", (req, res, next) => { req.query.shared = "true"; next(); }, listSheets);
 router.post("/", validate(schemas.createSheet), createSheet);
+router.post("/import", importSheet);
 router.get("/:id", checkSheetPermission("view"), getSheet);
+router.get("/:id/export", checkSheetPermission("view"), exportSheet);
 router.put("/:id", checkSheetPermission("admin"), updateSheet);
 router.delete("/:id", checkSheetPermission("admin"), deleteSheet);
 router.post("/:id/duplicate", checkSheetPermission("view"), duplicateSheet);
