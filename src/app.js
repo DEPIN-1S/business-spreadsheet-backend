@@ -29,7 +29,16 @@ app.set("trust proxy", 1);
 // ── Security ──────────────────────────────────────────────────────────────────
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(cors({
-    origin: process.env.FRONTEND_URL || "*",
+    origin: function (origin, callback) {
+        const allowedOrigins = (process.env.FRONTEND_URL || "").split(",").map(o => o.trim());
+        // allow requests with no origin (like mobile apps or curl) 
+        // or if it's in the allowed list
+        if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true
 }));
 
