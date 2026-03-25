@@ -57,16 +57,20 @@ async function buildCellMap(spreadsheetId) {
 export const getSheetData = async (req, res, next) => {
     try {
         const { id: spreadsheetId } = req.params;
+        console.log("DEBUG: getSheetData for spreadsheetId:", spreadsheetId);
         const { role, id: userId } = req.user;
         const { page, limit, offset } = getPagination(req);
 
-        const sheet = await Spreadsheet.findOne({ where: { id: spreadsheetId, isDeleted: false } });
-        if (!sheet) throw new AppError("Spreadsheet not found", 404);
+        const [sheet, columnsRaw] = await Promise.all([
+            Spreadsheet.findOne({ where: { id: spreadsheetId, isDeleted: false } }),
+            Column.findAll({
+                where: { spreadsheetId, isDeleted: false, isHidden: false },
+                order: [["orderIndex", "ASC"]]
+            })
+        ]);
 
-        let columns = await Column.findAll({
-            where: { spreadsheetId, isDeleted: false, isHidden: false },
-            order: [["orderIndex", "ASC"]]
-        });
+        if (!sheet) throw new AppError("Spreadsheet not found", 404);
+        let columns = columnsRaw;
 
         // Column privacy and permission mapping
         let columnPermissionsMap = {}; // { colId: 'edit' | 'view' }
@@ -164,7 +168,12 @@ export const getSheetData = async (req, res, next) => {
             },
             meta: getMeta(page, limit, totalRows)
         });
-    } catch (e) { next(e); }
+    } catch (e) {
+        console.error("FULL DB ERROR:", e);
+        if (e.sql) console.error("SQL:", e.sql);
+        next(e);
+    }
+
 };
 
 // ── Update a cell (with formula recalc + socket emit) ────────────────────────
@@ -213,7 +222,7 @@ export const updateCell = async (req, res, next) => {
 
         await cell.update({ rawValue: finalRaw, formattedValue: finalFormatted, computedValue: finalRaw, fileUrl, currencyCode: currencyCode !== undefined ? currencyCode : cell.currencyCode, updatedBy: req.user.id });
 
-        const updatedCells = await recalculateFormulas(spreadsheetId);
+        const updatedCells = await recalculateFormulas(spreadsheetId, cell.rowId);
         cell = await Cell.findByPk(cellId);
 
         // Socket emit — delta update only
@@ -278,7 +287,7 @@ export const upsertCell = async (req, res, next) => {
             { returning: true }
         );
 
-        const updatedCells = await recalculateFormulas(spreadsheetId);
+        const updatedCells = await recalculateFormulas(spreadsheetId, rowId);
         const cellResult = Array.isArray(cell) ? cell[0] : cell;
 
         const io = getIO();
@@ -300,32 +309,45 @@ export const upsertCell = async (req, res, next) => {
     } catch (e) { next(e); }
 };
 
-export async function recalculateFormulas(spreadsheetId) {
+export async function recalculateFormulas(spreadsheetId, targetRowId = null) {
     const columns = await Column.findAll({ where: { spreadsheetId, isDeleted: false }, order: [["orderIndex", "ASC"]] });
     const formulaCols = columns.filter(c => c.type === "formula" && c.formulaExpr);
     if (!formulaCols.length) return [];
 
     const graph = buildGraph(columns.map(c => c.toJSON()));
     const order = topoSort(graph);
-    const rows = await Row.findAll({ where: { spreadsheetId, isDeleted: false }, order: [["order", "ASC"]] });
+    
+    // Determine which rows to process
+    const rowWhere = { spreadsheetId, isDeleted: false };
+    if (targetRowId) rowWhere.id = targetRowId;
+    
+    const rows = await Row.findAll({ where: rowWhere, order: [["order", "ASC"]] });
 
-    // Build column-letter mapping once
-    const colLetterMap = {};  // colId → letter
-    const colInfoForResolve = []; // [{name, colLetter}] for resolveColumnNames
+    // Build column-letter mapping
+    const colLetterMap = {};
+    const colInfoForResolve = [];
     columns.forEach((col, i) => {
         const letter = indexToLetter(i);
         colLetterMap[col.id] = letter;
         colInfoForResolve.push({ name: col.name, colLetter: letter });
     });
 
-    // Build rowIndex mapping
+    // Build rowIndex mapping (needed for resolving A1 refs)
+    // We still need to know the global row index even if processing one row
+    const allRowsBasic = await Row.findAll({ 
+        where: { spreadsheetId, isDeleted: false }, 
+        attributes: ['id'], 
+        order: [["order", "ASC"]] 
+    });
     const rowIndexMap = {};
-    rows.forEach((row, i) => { rowIndexMap[row.id] = i + 1; });
+    allRowsBasic.forEach((r, i) => { rowIndexMap[r.id] = i + 1; });
 
-    // Build cellMap once (will be updated as we compute formulas)
+    // Build cellMap for dependencies
+    // For large sheets, we might only fetch cells for relevant columns, but let's stick to the current logic for safety
     const allCells = rows.length && columns.length
         ? await Cell.findAll({ where: { rowId: rows.map(r => r.id), columnId: columns.map(c => c.id) } })
         : [];
+    
     const cellMap = {};
     allCells.forEach(cell => {
         const colLetter = colLetterMap[cell.columnId];
@@ -336,6 +358,7 @@ export async function recalculateFormulas(spreadsheetId) {
     });
 
     const updatedCells = [];
+    const bulkUpdatePayload = [];
 
     for (const row of rows) {
         const rowNum = rowIndexMap[row.id];
@@ -343,45 +366,53 @@ export async function recalculateFormulas(spreadsheetId) {
             const col = formulaCols.find(c => c.id === colId);
             if (!col) continue;
             try {
-                // Convert column names in formula to A1-refs for this specific row
                 const resolvedFormula = resolveColumnNames(col.formulaExpr, colInfoForResolve, rowNum);
-
                 const rawComputed = evaluate(resolvedFormula, cellMap);
-                // Guard: ensure computed value is safe before storing
                 const computed = (rawComputed === null || rawComputed === undefined ||
                     (typeof rawComputed === "number" && !isFinite(rawComputed)))
                     ? 0 : rawComputed;
-                const currencyCodePayload = col.currencyCode ? { currencyCode: col.currencyCode } : {};
                 
-                const [updatedCell] = await Cell.upsert({
+                const computedStr = String(computed);
+
+                // Add to bulk update list
+                bulkUpdatePayload.push({
                     rowId: row.id,
                     columnId: col.id,
                     rawValue: col.formulaExpr,
-                    computedValue: String(computed),
-                    updatedBy: null,
-                    ...currencyCodePayload
-                }, { returning: true });
+                    computedValue: computedStr,
+                    currencyCode: col.currencyCode || null,
+                    updatedBy: null
+                });
 
                 // Update cellMap so dependent formulas in the same row can use this result
                 const colLetter = colLetterMap[col.id];
                 if (colLetter) {
-                    cellMap[`${colLetter}${rowNum}`] = String(computed);
+                    cellMap[`${colLetter}${rowNum}`] = computedStr;
                 }
 
                 updatedCells.push({
-                    cellId: Array.isArray(updatedCell) ? updatedCell[0]?.id : updatedCell?.id,
                     columnId: col.id,
                     rowId: row.id,
-                    computedValue: String(computed)
+                    computedValue: computedStr
                 });
             } catch (err) {
-                await Cell.upsert({
-                    rowId: row.id, columnId: col.id,
-                    rawValue: col.formulaExpr, computedValue: `#ERR: ${err.message}`
+                bulkUpdatePayload.push({
+                    rowId: row.id,
+                    columnId: col.id,
+                    rawValue: col.formulaExpr,
+                    computedValue: `#ERR: ${err.message}`
                 });
             }
         }
     }
+
+    if (bulkUpdatePayload.length) {
+        // Use bulkCreate with updateOnDuplicate for performance
+        await Cell.bulkCreate(bulkUpdatePayload, {
+            updateOnDuplicate: ["computedValue", "rawValue", "currencyCode", "updatedBy"]
+        });
+    }
+
     return updatedCells;
 }
 
