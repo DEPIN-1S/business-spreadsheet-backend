@@ -22,6 +22,10 @@ import inventoryRoutes from "./features/inventory/inventory.routes.js";
 
 const app = express();
 
+// ── Proxy Trust ──────────────────────────────────────────────────────────────
+// Enable trust proxy for express-rate-limit when behind a reverse proxy (Nginx)
+app.set("trust proxy", 1);
+
 // ── Security ──────────────────────────────────────────────────────────────────
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(cors({

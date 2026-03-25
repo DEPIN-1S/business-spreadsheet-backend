@@ -57,7 +57,6 @@ async function buildCellMap(spreadsheetId) {
 export const getSheetData = async (req, res, next) => {
     try {
         const { id: spreadsheetId } = req.params;
-        console.log("DEBUG: getSheetData for spreadsheetId:", spreadsheetId);
         const { role, id: userId } = req.user;
         const { page, limit, offset } = getPagination(req);
 
