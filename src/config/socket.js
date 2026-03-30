@@ -18,9 +18,24 @@ const sheetPresence = new Map();
 const onlineUsers = new Map();
 
 export function initSocket(httpServer) {
+    const allowedOrigins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5500",
+        "http://127.0.0.1:5500",
+
+        // Datsheets production frontend
+        "https://datsheets.in",
+        "https://www.datsheets.in"
+    ];
+
     io = new Server(httpServer, {
         cors: {
-            origin: process.env.FRONTEND_URL || "*",
+            origin: allowedOrigins,
             methods: ["GET", "POST"]
         }
     });
