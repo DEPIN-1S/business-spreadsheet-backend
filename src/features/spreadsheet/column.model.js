@@ -10,7 +10,7 @@ const Column = sequelize.define("Column", {
     spreadsheetId: { type: DataTypes.UUID, allowNull: false },
     name: { type: DataTypes.STRING, allowNull: false },
     type: {
-        type: DataTypes.ENUM("text", "number", "image", "video", "formula", "comment", "date", "dropdown", "currency", "multi_image"),
+        type: DataTypes.ENUM("text", "number", "image", "video", "formula", "comment", "date", "dropdown", "currency", "multi_image", "pdf"),
         defaultValue: "text"
     },
     currencyCode: { type: DataTypes.STRING(3), allowNull: true, defaultValue: null },
@@ -20,6 +20,8 @@ const Column = sequelize.define("Column", {
     width: { type: DataTypes.INTEGER, defaultValue: 150 },
     textColor: { type: DataTypes.STRING(20), allowNull: true },
     bgColor: { type: DataTypes.STRING(20), allowNull: true },
+    isBold: { type: DataTypes.BOOLEAN, defaultValue: false },
+    isItalic: { type: DataTypes.BOOLEAN, defaultValue: false },
     isHidden: { type: DataTypes.BOOLEAN, defaultValue: false },
     isLocked: { type: DataTypes.BOOLEAN, defaultValue: false },
     options: { type: DataTypes.JSON, defaultValue: [] },           // for dropdown choices

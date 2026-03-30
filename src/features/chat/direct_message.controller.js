@@ -62,7 +62,7 @@ export const getConversation = async (req, res, next) => {
                     { senderId: userId, receiverId: myId }
                 ]
             },
-            order: [["createdAt", "ASC"]],
+            order: [["createdAt", "DESC"]],
             limit,
             offset,
             include: [
@@ -71,13 +71,17 @@ export const getConversation = async (req, res, next) => {
             ]
         });
 
+        // We fetch DESC to get the newest messages up to the limit, 
+        // but the frontend needs them in ASC (chronological) order to display correctly top-to-bottom.
+        const sortedRows = rows.reverse();
+
         // Mark received messages as read
         await DirectMessage.update(
             { isRead: true },
             { where: { senderId: userId, receiverId: myId, isRead: false } }
         );
 
-        res.json({ data: rows, meta: getMeta(page, limit, count) });
+        res.json({ data: sortedRows, meta: getMeta(page, limit, count) });
     } catch (e) { next(e); }
 };
 

@@ -39,7 +39,7 @@ export const schemas = {
 
     createColumn: Joi.object({
         name: Joi.string().min(1).max(100).required(),
-        type: Joi.string().valid("text", "number", "date", "dropdown", "formula", "file", "currency", "fx", "image", "video", "multi_image", "comment").default("text"),
+        type: Joi.string().valid("text", "number", "date", "dropdown", "formula", "file", "currency", "fx", "image", "video", "multi_image", "comment", "pdf").default("text"),
         order: Joi.number().integer().min(0).default(0),
         orderIndex: Joi.number().integer().min(0),
         width: Joi.number().integer().min(20),

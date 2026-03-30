@@ -8,6 +8,9 @@ const Cell = sequelize.define("Cell", {
     rawValue: { type: DataTypes.TEXT, allowNull: true },       // user-entered value
     formattedValue: { type: DataTypes.TEXT, allowNull: true }, // display-ready value
     computedValue: { type: DataTypes.TEXT, allowNull: true },  // formula-evaluated value
+    bgColor: { type: DataTypes.STRING, allowNull: true },      // background color
+    isBold: { type: DataTypes.BOOLEAN, defaultValue: false },
+    isItalic: { type: DataTypes.BOOLEAN, defaultValue: false },
     currencyCode: { type: DataTypes.STRING(3), allowNull: true, defaultValue: null },
     fileUrl: { type: DataTypes.STRING, allowNull: true },      // for image/video columns
     updatedBy: { type: DataTypes.UUID, allowNull: true },

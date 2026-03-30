@@ -83,14 +83,21 @@ export const getSheetData = async (req, res, next) => {
                 columns = columns.filter(c => columnPermissionsMap[c.id]);
             } else {
                 // If no ColumnPermission record, staff can see nothing (secure by default)
-                // Actually, if we want "all columns" by default if shared generally, we should check SheetPermission.
-                // For now, let's stick to the user's intent: sharing specific columns.
                 columns = [];
             }
         } else {
             // Admin/SuperAdmin see all and can edit all
             columns.forEach(c => { columnPermissionsMap[c.id] = 'edit'; });
         }
+
+        // Attach permission to each column object for frontend consumption
+        columns = columns.map(c => {
+            const colJson = c.toJSON ? c.toJSON() : c;
+            return {
+                ...colJson,
+                permission: columnPermissionsMap[c.id] || 'view'
+            };
+        });
 
         const search = req.query.search;
         let rowInclude = [];
@@ -133,6 +140,8 @@ export const getSheetData = async (req, res, next) => {
             id: row.id,
             order: row.order,
             rowColor: row.rowColor,
+            isBold: row.isBold,
+            isItalic: row.isItalic,
             isLocked: row.isLocked,
             cells: columns.map((col, ci) => {
                 const cell = cellIdx[`${row.id}_${col.id}`];
@@ -151,6 +160,9 @@ export const getSheetData = async (req, res, next) => {
                     computedValue: cell?.computedValue ?? null,
                     currencyCode: cell?.currencyCode ?? null,
                     fileUrl: cell?.fileUrl ?? null,
+                    bgColor: cell?.bgColor ?? null,
+                    isBold: cell?.isBold ?? false,
+                    isItalic: cell?.isItalic ?? false,
                     ref: `${indexToLetter(ci)}${ri + 1 + offset}`
                 };
             })
@@ -179,7 +191,7 @@ export const getSheetData = async (req, res, next) => {
 export const updateCell = async (req, res, next) => {
     try {
         const { id: spreadsheetId, cellId } = req.params;
-        const { rawValue, formattedValue, fileUrl, currencyCode } = req.body;
+        const { rawValue, formattedValue, fileUrl, currencyCode, bgColor, isBold, isItalic } = req.body;
 
         if (req.user.role === "staff") {
             const perm = await SheetPermission.findOne({ where: { userId: req.user.id, spreadsheetId } });
@@ -206,22 +218,35 @@ export const updateCell = async (req, res, next) => {
         
         let finalRaw = rawValue;
         let finalFormatted = formattedValue ?? rawValue;
-        if (col.type === "currency") {
-            finalRaw = parseCurrencyInput(rawValue);
-            finalFormatted = formatCurrencyValue(parseFloat(finalRaw), currencyCode || cell.currencyCode || col.currencyCode);
-        } else if (col.type === "date" && rawValue) {
-            const d = new Date(rawValue);
-            if (!isNaN(d.getTime())) {
-                finalRaw = d.toISOString().slice(0, 10);
-                finalFormatted = d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+        if (rawValue !== undefined) {
+            if (col.type === "currency") {
+                finalRaw = parseCurrencyInput(rawValue);
+                finalFormatted = formatCurrencyValue(parseFloat(finalRaw), currencyCode || cell.currencyCode || col.currencyCode);
+            } else if (col.type === "date" && rawValue) {
+                const d = new Date(rawValue);
+                if (!isNaN(d.getTime())) {
+                    finalRaw = d.toISOString().slice(0, 10);
+                    finalFormatted = d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+                }
             }
         }
 
-        if (col?.validationRules) validateCellValue(finalRaw, col);
+        if (col?.validationRules && finalRaw !== undefined) validateCellValue(finalRaw, col);
 
-        await cell.update({ rawValue: finalRaw, formattedValue: finalFormatted, computedValue: finalRaw, fileUrl, currencyCode: currencyCode !== undefined ? currencyCode : cell.currencyCode, updatedBy: req.user.id });
+        const updateData = {};
+        if (finalRaw !== undefined) updateData.rawValue = finalRaw;
+        if (finalFormatted !== undefined) updateData.formattedValue = finalFormatted;
+        if (finalRaw !== undefined) updateData.computedValue = finalRaw;
+        if (fileUrl !== undefined) updateData.fileUrl = fileUrl;
+        if (bgColor !== undefined) updateData.bgColor = bgColor;
+        if (isBold !== undefined) updateData.isBold = isBold;
+        if (isItalic !== undefined) updateData.isItalic = isItalic;
+        if (currencyCode !== undefined) updateData.currencyCode = currencyCode;
+        updateData.updatedBy = req.user.id;
 
-        const updatedCells = await recalculateFormulas(spreadsheetId, cell.rowId);
+        await cell.update(updateData);
+
+        const updatedCells = await recalculateFormulas(spreadsheetId);
         cell = await Cell.findByPk(cellId);
 
         // Socket emit — delta update only
@@ -250,7 +275,7 @@ export const updateCell = async (req, res, next) => {
 // ── Upsert cell ───────────────────────────────────────────────────────────────
 export const upsertCell = async (req, res, next) => {
     try {
-        const { rowId, columnId, rawValue, fileUrl, formattedValue, currencyCode } = req.body;
+        const { rowId, columnId, rawValue, fileUrl, formattedValue, currencyCode, bgColor, isBold, isItalic } = req.body;
         const { id: spreadsheetId } = req.params;
 
         // Granular permission check for staff
@@ -268,25 +293,48 @@ export const upsertCell = async (req, res, next) => {
         
         let finalRaw = rawValue;
         let finalFormatted = formattedValue ?? rawValue;
-        if (col.type === "currency") {
-            finalRaw = parseCurrencyInput(rawValue);
-            finalFormatted = formatCurrencyValue(parseFloat(finalRaw), currencyCode || col.currencyCode);
-        } else if (col.type === "date" && rawValue) {
-            const d = new Date(rawValue);
-            if (!isNaN(d.getTime())) {
-                finalRaw = d.toISOString().slice(0, 10);
-                finalFormatted = d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+        if (rawValue !== undefined) {
+            if (col.type === "currency") {
+                finalRaw = parseCurrencyInput(rawValue);
+                finalFormatted = formatCurrencyValue(parseFloat(finalRaw), currencyCode || col.currencyCode);
+            } else if (col.type === "date" && rawValue) {
+                const d = new Date(rawValue);
+                if (!isNaN(d.getTime())) {
+                    finalRaw = d.toISOString().slice(0, 10);
+                    finalFormatted = d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+                }
             }
         }
 
-        if (col?.validationRules) validateCellValue(finalRaw, col);
+        if (col?.validationRules && finalRaw !== undefined) validateCellValue(finalRaw, col);
 
-        const [cell] = await Cell.upsert(
-            { rowId, columnId, rawValue: finalRaw, formattedValue: finalFormatted, computedValue: finalRaw, currencyCode, fileUrl, updatedBy: req.user.id },
-            { returning: true }
-        );
+        let cell = await Cell.findOne({ where: { rowId, columnId } });
+        if (cell) {
+            const updateData = {};
+            if (finalRaw !== undefined) updateData.rawValue = finalRaw;
+            if (finalFormatted !== undefined) updateData.formattedValue = finalFormatted;
+            if (finalRaw !== undefined) updateData.computedValue = finalRaw; // Initially set to rawValue
+            if (fileUrl !== undefined) updateData.fileUrl = fileUrl;
+            if (bgColor !== undefined) updateData.bgColor = bgColor;
+            if (isBold !== undefined) updateData.isBold = isBold;
+            if (isItalic !== undefined) updateData.isItalic = isItalic;
+            if (currencyCode !== undefined) updateData.currencyCode = currencyCode;
+            updateData.updatedBy = req.user.id;
+            await cell.update(updateData);
+        } else {
+            cell = await Cell.create({
+                rowId, columnId, 
+                rawValue: finalRaw ?? null, 
+                formattedValue: finalFormatted ?? finalRaw ?? null, 
+                computedValue: finalRaw ?? null, 
+                currencyCode, fileUrl, bgColor, 
+                isBold: isBold ?? false,
+                isItalic: isItalic ?? false,
+                updatedBy: req.user.id
+            });
+        }
 
-        const updatedCells = await recalculateFormulas(spreadsheetId, rowId);
+        const updatedCells = await recalculateFormulas(spreadsheetId);
         const cellResult = Array.isArray(cell) ? cell[0] : cell;
 
         const io = getIO();
@@ -304,13 +352,13 @@ export const upsertCell = async (req, res, next) => {
             }
         }
 
-        res.json({ data: cellResult, message: "Cell saved" });
+        res.json({ data: cell, message: "Cell saved" });
     } catch (e) { next(e); }
 };
 
 export async function recalculateFormulas(spreadsheetId, targetRowId = null) {
     const columns = await Column.findAll({ where: { spreadsheetId, isDeleted: false }, order: [["orderIndex", "ASC"]] });
-    const formulaCols = columns.filter(c => c.type === "formula" && c.formulaExpr);
+    const formulaCols = columns.filter(c => c.formulaExpr); // Include any column with a formula expression
     if (!formulaCols.length) return [];
 
     const graph = buildGraph(columns.map(c => c.toJSON()));
@@ -343,8 +391,9 @@ export async function recalculateFormulas(spreadsheetId, targetRowId = null) {
 
     // Build cellMap for dependencies
     // For large sheets, we might only fetch cells for relevant columns, but let's stick to the current logic for safety
-    const allCells = rows.length && columns.length
-        ? await Cell.findAll({ where: { rowId: rows.map(r => r.id), columnId: columns.map(c => c.id) } })
+    const colIds = columns.map(c => c.id);
+    const allCells = colIds.length
+        ? await Cell.findAll({ where: { columnId: colIds } })
         : [];
     
     const cellMap = {};
@@ -417,6 +466,7 @@ export async function recalculateFormulas(spreadsheetId, targetRowId = null) {
 
 // ── Cell value validation ─────────────────────────────────────────────────────
 function validateCellValue(value, col) {
+    if (value === undefined) return; // Color-only update, skip validation
     const rules = col.validationRules || {};
     if (rules.required && (value === null || value === undefined || value === "")) {
         throw new AppError(`Column "${col.name}" is required`, 422);
@@ -453,9 +503,38 @@ function validateCellValue(value, col) {
 export const addRow = async (req, res, next) => {
     try {
         const { id: spreadsheetId } = req.params;
-        const { rowColor, height } = req.body;
-        const count = await Row.count({ where: { spreadsheetId, isDeleted: false } });
-        const row = await Row.create({ spreadsheetId, order: count, rowColor, height });
+        const { rowColor, height, isBold, isItalic, targetRowId, position } = req.body;
+        
+        let newOrder;
+        
+        if (targetRowId && position) {
+            const targetRow = await Row.findByPk(targetRowId);
+            if (!targetRow) throw new AppError("Target row not found", 404);
+            
+            newOrder = position === 'above' ? targetRow.order : targetRow.order + 1;
+            
+            // Shift subsequent rows
+            await Row.increment('order', {
+                by: 1,
+                where: {
+                    spreadsheetId,
+                    isDeleted: false,
+                    order: { [Op.gte]: newOrder }
+                }
+            });
+        } else {
+            const count = await Row.count({ where: { spreadsheetId, isDeleted: false } });
+            newOrder = count;
+        }
+        
+        const row = await Row.create({ 
+            spreadsheetId, 
+            order: newOrder, 
+            rowColor, 
+            height,
+            isBold: isBold ?? false,
+            isItalic: isItalic ?? false
+        });
 
         const io = getIO();
         if (io) io.to(`sheet:${spreadsheetId}`).emit("row_updated", { action: "added", sheetId: spreadsheetId, row: row.toJSON() });
@@ -501,16 +580,77 @@ export const reorderRow = async (req, res, next) => {
 export const updateRowColor = async (req, res, next) => {
     try {
         const { id: spreadsheetId, rowId } = req.params;
-        const { rowColor } = req.body;
+        const { rowColor, isBold, isItalic } = req.body;
 
         const row = await Row.findByPk(rowId);
         if (!row) throw new AppError("Row not found", 404);
-        await row.update({ rowColor: rowColor || null });
+        const patchData = {};
+        if (rowColor !== undefined) patchData.rowColor = rowColor || null;
+        if (isBold !== undefined) patchData.isBold = isBold;
+        if (isItalic !== undefined) patchData.isItalic = isItalic;
+        
+        await row.update(patchData);
 
         const io = getIO();
         if (io) io.to(`sheet:${spreadsheetId}`).emit("row_updated", { action: "color_changed", sheetId: spreadsheetId, rowId, rowColor });
 
         res.json({ data: row, message: "Row color updated" });
+    } catch (e) { next(e); }
+};
+
+export const copyRow = async (req, res, next) => {
+    try {
+        const { id: spreadsheetId, rowId } = req.params;
+        const originalRow = await Row.findByPk(rowId);
+        if (!originalRow) throw new AppError("Row not found", 404);
+
+        const newOrder = originalRow.order + 1;
+        
+        // Shift subsequent rows
+        await Row.increment('order', {
+            by: 1,
+            where: {
+                spreadsheetId,
+                isDeleted: false,
+                order: { [Op.gte]: newOrder }
+            }
+        });
+        
+        let newRow;
+        await sequelize.transaction(async (t) => {
+            newRow = await Row.create({ 
+                spreadsheetId, 
+                order: newOrder, 
+                rowColor: originalRow.rowColor, 
+                height: originalRow.height,
+                isBold: originalRow.isBold,
+                isItalic: originalRow.isItalic
+            }, { transaction: t });
+
+            const cells = await Cell.findAll({ where: { rowId: originalRow.id } });
+            const newCells = cells.map(cell => ({
+                rowId: newRow.id,
+                columnId: cell.columnId,
+                rawValue: cell.rawValue,
+                formattedValue: cell.formattedValue,
+                computedValue: cell.computedValue,
+                bgColor: cell.bgColor,
+                isBold: cell.isBold,
+                isItalic: cell.isItalic,
+                currencyCode: cell.currencyCode,
+                fileUrl: cell.fileUrl,
+                updatedBy: req.user.id
+            }));
+
+            if (newCells.length) {
+                await Cell.bulkCreate(newCells, { transaction: t });
+            }
+        });
+
+        const io = getIO();
+        if (io) io.to(`sheet:${spreadsheetId}`).emit("row_updated", { action: "added", sheetId: spreadsheetId, row: newRow.toJSON() });
+
+        res.status(201).json({ data: newRow, message: "Row copied" });
     } catch (e) { next(e); }
 };
 
@@ -769,14 +909,49 @@ export const duplicateSheet = async (req, res, next) => {
             const columns = await Column.findAll({ where: { spreadsheetId: original.id, isDeleted: false }, order: [["orderIndex", "ASC"]] });
             const columnMap = {};
             for (const col of columns) {
-                const newCol = await Column.create({ spreadsheetId: newSheet.id, name: col.name, type: col.type, orderIndex: col.orderIndex, defaultValue: col.defaultValue, alignment: col.alignment, width: col.width, textColor: col.textColor, bgColor: col.bgColor, options: col.options, validationRules: col.validationRules, formulaExpr: col.formulaExpr, currencyCode: col.currencyCode }, { transaction: t });
+                const newCol = await Column.create({ 
+                    spreadsheetId: newSheet.id, 
+                    name: col.name, 
+                    type: col.type, 
+                    orderIndex: col.orderIndex, 
+                    defaultValue: col.defaultValue, 
+                    alignment: col.alignment, 
+                    width: col.width, 
+                    textColor: col.textColor, 
+                    bgColor: col.bgColor, 
+                    isBold: col.isBold,
+                    isItalic: col.isItalic,
+                    options: col.options, 
+                    validationRules: col.validationRules, 
+                    formulaExpr: col.formulaExpr, 
+                    currencyCode: col.currencyCode 
+                }, { transaction: t });
                 columnMap[col.id] = newCol;
             }
             const rows = await Row.findAll({ where: { spreadsheetId: original.id, isDeleted: false }, order: [["order", "ASC"]] });
             for (const row of rows) {
-                const newRow = await Row.create({ spreadsheetId: newSheet.id, order: row.order, rowColor: row.rowColor, height: row.height }, { transaction: t });
+                const newRow = await Row.create({ 
+                    spreadsheetId: newSheet.id, 
+                    order: row.order, 
+                    rowColor: row.rowColor, 
+                    height: row.height,
+                    isBold: row.isBold,
+                    isItalic: row.isItalic
+                }, { transaction: t });
                 const cells = await Cell.findAll({ where: { rowId: row.id } });
-                const newCells = cells.map(cell => ({ rowId: newRow.id, columnId: columnMap[cell.columnId]?.id, rawValue: cell.rawValue, formattedValue: cell.formattedValue, computedValue: cell.computedValue, currencyCode: cell.currencyCode, fileUrl: cell.fileUrl, updatedBy: req.user.id })).filter(c => c.columnId);
+                const newCells = cells.map(cell => ({ 
+                    rowId: newRow.id, 
+                    columnId: columnMap[cell.columnId]?.id, 
+                    rawValue: cell.rawValue, 
+                    formattedValue: cell.formattedValue, 
+                    computedValue: cell.computedValue, 
+                    bgColor: cell.bgColor, 
+                    isBold: cell.isBold,
+                    isItalic: cell.isItalic,
+                    currencyCode: cell.currencyCode, 
+                    fileUrl: cell.fileUrl, 
+                    updatedBy: req.user.id 
+                })).filter(c => c.columnId);
                 if (newCells.length) await Cell.bulkCreate(newCells, { transaction: t });
             }
         });
@@ -814,6 +989,12 @@ export const updateColumn = async (req, res, next) => {
         const col = await Column.findOne({ where: { id: colId, spreadsheetId, isDeleted: false } });
         if (!col) throw new AppError("Column not found", 404);
         const old = col.toJSON();
+        
+        // If type is changing, clear all existing data in this column
+        if (req.body.type && req.body.type !== col.type) {
+            await Cell.destroy({ where: { columnId: colId } });
+        }
+
         if (req.body.formulaExpr) {
             const cols = await Column.findAll({ where: { spreadsheetId: col.spreadsheetId, isDeleted: false } });
             const graph = buildGraph(cols.map(c => c.id === col.id ? { ...c.toJSON(), formulaExpr: req.body.formulaExpr } : c.toJSON()));
@@ -971,6 +1152,7 @@ export const importSheet = async (req, res, next) => {
                 formattedValue: cell.formattedValue,
                 isFormula: cell.isFormula,
                 fileUrl: cell.fileUrl,
+                bgColor: cell.bgColor,
                 currencyCode: cell.currencyCode
             })).filter(c => c.rowId && c.columnId);
 

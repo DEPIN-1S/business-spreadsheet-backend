@@ -8,7 +8,7 @@ import {
     toggleColumnHidden, toggleColumnLocked,
     shareSheet, updateShareRole, removeShare, getSharedWithMe, setPermission, listPermissions,
     createSheet, getSheet, deleteSheet, duplicateSheet,
-    exportSheet, importSheet
+    exportSheet, importSheet, copyRow
 } from "./spreadsheet.controller.js";
 import { protect } from "../../middleware/auth.js";
 import { checkSheetPermission } from "../../middleware/rbac.js";
@@ -58,6 +58,7 @@ router.post("/:id/rows", checkSheetPermission("edit"), addRow);
 router.delete("/:id/rows/:rowId", checkSheetPermission("admin"), deleteRow); // Admin only delete row?
 router.patch("/:id/rows/:rowId/order", checkSheetPermission("edit"), reorderRow);
 router.patch("/:id/rows/:rowId/color", checkSheetPermission("edit"), updateRowColor);
+router.post("/:id/rows/:rowId/copy", checkSheetPermission("edit"), copyRow);
 router.post("/:id/rows/bulk", checkSheetPermission("edit"), bulkInsertRows);
 
 // Comments

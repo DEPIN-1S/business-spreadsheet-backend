@@ -6,6 +6,8 @@ const Row = sequelize.define("Row", {
     spreadsheetId: { type: DataTypes.UUID, allowNull: false },
     order: { type: DataTypes.INTEGER, defaultValue: 0 },
     rowColor: { type: DataTypes.STRING(20), allowNull: true },
+    isBold: { type: DataTypes.BOOLEAN, defaultValue: false },
+    isItalic: { type: DataTypes.BOOLEAN, defaultValue: false },
     height: { type: DataTypes.INTEGER, defaultValue: 32 },
     isLocked: { type: DataTypes.BOOLEAN, defaultValue: false },
     isDeleted: { type: DataTypes.BOOLEAN, defaultValue: false }
