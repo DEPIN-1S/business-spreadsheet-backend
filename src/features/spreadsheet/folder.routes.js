@@ -2,7 +2,7 @@ import express from "express";
 import {
     createFolder, updateFolder, deleteFolder,
     getFolderTree, getFolderChildren, getBreadcrumb,
-    setFolderPermission
+    setFolderPermission, duplicateFolder
 } from "./folder.controller.js";
 import { protect } from "../../middleware/auth.js";
 
@@ -16,6 +16,7 @@ router.get("/:id/breadcrumb", getBreadcrumb);
 
 // Authenticated folder management
 router.post("/", createFolder);
+router.post("/:id/duplicate", duplicateFolder);
 router.put("/:id", updateFolder);
 router.delete("/:id", protect(["admin", "superadmin"]), deleteFolder);
 

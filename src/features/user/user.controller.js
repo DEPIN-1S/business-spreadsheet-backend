@@ -30,17 +30,23 @@ async function createRefreshToken(userId) {
 
 export const register = async (req, res, next) => {
   try {
-    const { name, email, password, phone, role, avatar } = req.body;
-    const existing = await User.findOne({ where: { email } });
-    if (existing) throw new AppError("Email already registered", 409);
+    const { name, email, phone, role, avatar } = req.body;
 
-    const hash = await bcrypt.hash(password, 10);
+    // Check if phone already registered
+    const existingPhone = await User.findOne({ where: { phone } });
+    if (existingPhone) throw new AppError("Phone number already registered", 409);
+
+    if (email) {
+      const existingEmail = await User.findOne({ where: { email } });
+      if (existingEmail) throw new AppError("Email already registered", 409);
+    }
+
     const assignedRole = (req.user && ["admin", "superadmin"].includes(req.user.role))
       ? (role || "staff")
       : "staff";
 
-    const user = await User.create({ name, email, password: hash, phone, avatar, role: assignedRole });
-    await logAction(req.user?.id || null, "user", user.id, "create", null, { email, role: assignedRole }, req);
+    const user = await User.create({ name, email, phone, avatar, role: assignedRole });
+    await logAction(req.user?.id || null, "user", user.id, "create", null, { phone, role: assignedRole }, req);
 
     const accessToken = signAccessToken(user);
     const refreshToken = await createRefreshToken(user.id);
@@ -56,16 +62,92 @@ export const register = async (req, res, next) => {
   } catch (e) { next(e); }
 };
 
-// ── Login ─────────────────────────────────────────────────────────────────────
+// ── MSG91 OTP API Integration ───────────────────────────────────────────────
 
-export const login = async (req, res, next) => {
+export const sendLoginOtp = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
-    const user = await User.findOne({ where: { email, isActive: true } });
-    if (!user) throw new AppError("Invalid credentials", 401);
+    const { phone } = req.body;
+    if (!phone) throw new AppError("Phone number is required", 400);
 
-    const ok = await bcrypt.compare(password, user.password);
-    if (!ok) throw new AppError("Invalid credentials", 401);
+    const user = await User.findOne({ where: { phone, isActive: true } });
+    if (!user) throw new AppError("User not found or inactive", 404);
+
+    if (process.env.NODE_ENV !== "production" && phone === "9999999999") {
+      // Bypass MSG91 for test admin in non-production environments
+    } else {
+      // Call MSG91 API to send OTP
+      const TEMPLATE_ID = process.env.MSG91_TEMPLATE_ID;
+      const AUTH_KEY = process.env.MSG91_AUTH_KEY;
+      const SENDER_ID = process.env.MSG91_SENDER_ID;
+      console.log("MSG91_TEMPLATE_ID:", process.env.MSG91_TEMPLATE_ID);
+      console.log("MSG91_SENDER_ID:", process.env.MSG91_SENDER_ID);
+      
+      // Generate exactly 4 digits for the OTP
+      const generatedOtp = Math.floor(1000 + Math.random() * 9000).toString();
+      
+      const payload = {
+        template_id: TEMPLATE_ID,
+        short_url: "0",
+        recipients: [
+          {
+            mobiles: `91${phone}`,
+            OTP: String(generatedOtp)
+          }
+        ]
+      };
+
+      console.log("MSG91 payload:", JSON.stringify(payload, null, 2));
+
+      const url = "https://control.msg91.com/api/v5/flow/";
+      const response = await fetch(url, { 
+        method: "POST",
+        headers: { "authkey": AUTH_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      
+      console.log(`[MSG91 SEND OTP RESPONSE for ${phone}]:`, data);
+
+      if (data.type === "error" || data.hasError) {
+        throw new AppError(data.message || "Failed to send OTP", 500);
+      }
+
+      // Store in DB with 10 mins expiry
+      await user.update({
+        loginOtp: generatedOtp,
+        loginOtpExpiry: new Date(Date.now() + 10 * 60 * 1000)
+      });
+    }
+
+    // Only for logging purposes, no db state changed
+    await logAction(user.id, "user", user.id, "otp_sent", null, null, req);
+
+    res.json({ message: "OTP sent successfully" });
+  } catch (e) { next(e); }
+};
+
+export const verifyLoginOtp = async (req, res, next) => {
+  try {
+    const { phone, otp } = req.body;
+    if (!phone || !otp) throw new AppError("Phone number and OTP are required", 400);
+
+    const user = await User.findOne({ where: { phone, isActive: true } });
+    if (!user) throw new AppError("User not found or inactive", 404);
+
+    if (process.env.NODE_ENV !== "production" && phone === "9999999999" && otp === "1234") {
+      // Bypass MSG91 for test admin in non-production environments
+    } else {
+      // Local OTP Verification
+      if (!user.loginOtp || user.loginOtp !== otp) {
+         throw new AppError("Invalid OTP", 401);
+      }
+      if (!user.loginOtpExpiry || new Date() > user.loginOtpExpiry) {
+         throw new AppError("OTP has expired", 401);
+      }
+      
+      // Clear OTP after successful use
+      await user.update({ loginOtp: null, loginOtpExpiry: null });
+    }
 
     await logAction(user.id, "user", user.id, "login", null, null, req);
 
@@ -76,7 +158,7 @@ export const login = async (req, res, next) => {
       data: {
         accessToken,
         refreshToken,
-        user: { id: user.id, name: user.name, email: user.email, role: user.role, avatar: user.avatar }
+        user: { id: user.id, name: user.name, phone: user.phone, email: user.email, role: user.role, avatar: user.avatar }
       },
       message: "Login successful"
     });
@@ -159,21 +241,22 @@ export const searchUsers = async (req, res, next) => {
   try {
     const { q, limit = 20 } = req.query;
     const where = { isActive: true };
-    
+
     if (q) {
       where[Op.or] = [
         { name: { [Op.like]: `%${q}%` } },
-        { email: { [Op.like]: `%${q}%` } }
+        { email: { [Op.like]: `%${q}%` } },
+        { phone: { [Op.like]: `%${q}%` } }
       ];
     }
-    
+
     const users = await User.findAll({
       where,
       limit: parseInt(limit, 10),
-      attributes: ["id", "name", "email", "avatar", "role"], // Safe fields
+      attributes: ["id", "name", "email", "phone", "avatar", "role"], // Safe fields
       order: [["name", "ASC"]]
     });
-    
+
     res.json({ data: users });
   } catch (e) { next(e); }
 };
@@ -184,13 +267,13 @@ export const updateUser = async (req, res, next) => {
   try {
     const user = await User.findByPk(req.params.id);
     if (!user) throw new AppError("User not found", 404);
-    const old = { name: user.name, email: user.email, role: user.role, isActive: user.isActive };
-    const { name, email, phone, role, isActive, password, avatar } = req.body;
+    const old = { name: user.name, email: user.email, phone: user.phone, role: user.role, isActive: user.isActive };
+    const { name, email, phone, role, isActive, avatar } = req.body;
     const updates = { name, email, phone, role, isActive, avatar };
-    if (password) updates.password = await bcrypt.hash(password, 10);
+
     await user.update(updates);
-    await logAction(req.user.id, "user", user.id, "update", old, { name, email, role, isActive }, req);
-    res.json({ data: { id: user.id, name: user.name, email: user.email, role: user.role, avatar: user.avatar }, message: "User updated" });
+    await logAction(req.user.id, "user", user.id, "update", old, { name, email, phone, role, isActive }, req);
+    res.json({ data: { id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role, avatar: user.avatar }, message: "User updated" });
   } catch (e) { next(e); }
 };
 

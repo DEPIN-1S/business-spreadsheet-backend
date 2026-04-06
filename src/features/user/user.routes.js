@@ -1,6 +1,6 @@
 import express from "express";
 import {
-    register, login, me, getAll, searchUsers, updateUser, deleteUser,
+    register, sendLoginOtp, verifyLoginOtp, me, getAll, searchUsers, updateUser, deleteUser,
     refreshToken, logout
 } from "./user.controller.js";
 import { protect } from "../../middleware/auth.js";
@@ -9,7 +9,8 @@ const router = express.Router();
 
 // Public
 router.post("/register", register);
-router.post("/login", login);
+router.post("/send-otp", sendLoginOtp);
+router.post("/verify-otp", verifyLoginOtp);
 router.post("/refresh", refreshToken);
 router.post("/logout", protect(), logout);
 

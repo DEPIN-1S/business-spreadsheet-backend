@@ -163,12 +163,12 @@ export const duplicateSheet = async (req, res, next) => {
 export const shareSheet = async (req, res, next) => {
   try {
     const { id: spreadsheetId } = req.params;
-    const { email, role = "viewer", columnAccess } = req.body;
+    const { phone, role = "viewer", columnAccess } = req.body;
 
     const sheet = await Spreadsheet.findOne({ where: { id: spreadsheetId, isDeleted: false } });
     if (!sheet) throw new AppError("Spreadsheet not found", 404);
 
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({ where: { phone } });
     if (!user) throw new AppError("User not found", 404);
 
     const canView = true;
@@ -471,7 +471,7 @@ export const listActiveUsers = async (req, res, next) => {
     const socketIds = io ? [...(io.sockets.adapter.rooms.get(roomName) || [])] : [];
     const activeUsers = socketIds.map(sid => {
       const s = io.sockets.sockets.get(sid);
-      return s?.user ? { id: s.user.id, name: s.user.name, email: s.user.email } : null;
+      return s?.user ? { id: s.user.id, name: s.user.name, phone: s.user.phone } : null;
     }).filter(Boolean);
     res.json({ data: activeUsers });
   } catch (e) { next(e); }

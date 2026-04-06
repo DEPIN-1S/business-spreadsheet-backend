@@ -1,2112 +1,2168 @@
 {
-    "info": {
-        "_postman_id": "datarithm-backend-v1",
-        "name": "Datarithm Backend API",
-        "description": "Complete API collection for the Datarithm real-time spreadsheet platform.\n\n**Setup:**\n1. Set `baseUrl` variable to `http://localhost:3000`\n2. After login, copy `accessToken` into the `token` variable\n3. Copy `refreshToken` into the `refreshToken` variable",
-        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  "info": {
+    "_postman_id": "datarithm-backend-v1",
+    "name": "Datarithm Backend API",
+    "description": "Complete API collection for the Datarithm real-time spreadsheet platform.\n\n**Setup:**\n1. Set `baseUrl` variable to `http://localhost:3000`\n2. After login, copy `accessToken` into the `token` variable\n3. Copy `refreshToken` into the `refreshToken` variable",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
     },
-    "variable": [
-        {
-            "key": "baseUrl",
-            "value": "http://localhost:3000"
-        },
-        {
-            "key": "token",
-            "value": ""
-        },
-        {
-            "key": "refreshToken",
-            "value": ""
-        },
-        {
-            "key": "sheetId",
-            "value": ""
-        },
-        {
-            "key": "folderId",
-            "value": ""
-        },
-        {
-            "key": "userId",
-            "value": ""
-        },
-        {
-            "key": "columnId",
-            "value": ""
-        },
-        {
-            "key": "rowId",
-            "value": ""
-        },
-        {
-            "key": "cellId",
-            "value": ""
-        },
-        {
-            "key": "commentId",
-            "value": ""
-        },
-        {
-            "key": "roomId",
-            "value": ""
-        },
-        {
-            "key": "messageId",
-            "value": ""
-        }
-    ],
-    "auth": {
-        "type": "bearer",
-        "bearer": [
-            {
-                "key": "token",
-                "value": "{{token}}",
-                "type": "string"
-            }
-        ]
+    {
+      "key": "token",
+      "value": ""
     },
-    "item": [
-        {
-            "name": "🔐 Auth",
-            "item": [
-                {
-                    "name": "Register",
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/user/register",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "user",
-                                "register"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"Password@123\",\n  \"phone\": \"9876543210\",\n  \"role\": \"staff\"\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Login",
-                    "event": [
-                        {
-                            "listen": "test",
-                            "script": {
-                                "exec": [
-                                    "const r = pm.response.json();",
-                                    "if(r.data){",
-                                    "  pm.collectionVariables.set('token', r.data.accessToken);",
-                                    "  pm.collectionVariables.set('refreshToken', r.data.refreshToken);",
-                                    "}"
-                                ]
-                            }
-                        }
-                    ],
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/user/login",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "user",
-                                "login"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"email\": \"john@example.com\",\n  \"password\": \"Password@123\"\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Refresh Token",
-                    "event": [
-                        {
-                            "listen": "test",
-                            "script": {
-                                "exec": [
-                                    "const r = pm.response.json();",
-                                    "if(r.data){",
-                                    "  pm.collectionVariables.set('token', r.data.accessToken);",
-                                    "  pm.collectionVariables.set('refreshToken', r.data.refreshToken);",
-                                    "}"
-                                ]
-                            }
-                        }
-                    ],
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/user/refresh",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "user",
-                                "refresh"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Logout",
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/user/logout",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "user",
-                                "logout"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Get My Profile",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/user/me",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "user",
-                                "me"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "List All Users (Admin)",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/user?page=1&limit=20&role=staff",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "user"
-                            ],
-                            "query": [
-                                {
-                                    "key": "page",
-                                    "value": "1"
-                                },
-                                {
-                                    "key": "limit",
-                                    "value": "20"
-                                },
-                                {
-                                    "key": "role",
-                                    "value": "staff"
-                                }
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Update User",
-                    "request": {
-                        "method": "PUT",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/user/{{userId}}",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "user",
-                                "{{userId}}"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"name\": \"Updated Name\",\n  \"phone\": \"9000000000\",\n  \"avatar\": \"https://example.com/avatar.jpg\"\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Deactivate User",
-                    "request": {
-                        "method": "DELETE",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/user/{{userId}}",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "user",
-                                "{{userId}}"
-                            ]
-                        }
-                    }
-                }
-            ]
-        },
-        {
-            "name": "📁 Folders",
-            "item": [
-                {
-                    "name": "Get Full Folder Tree",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/folders",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "folders"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Create Folder (Root)",
-                    "event": [
-                        {
-                            "listen": "test",
-                            "script": {
-                                "exec": [
-                                    "const r=pm.response.json(); if(r.data) pm.collectionVariables.set('folderId',r.data.id);"
-                                ]
-                            }
-                        }
-                    ],
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/folders",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "folders"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"name\": \"Projects\"\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Create Subfolder",
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/folders",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "folders"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"name\": \"Q1 Budget\",\n  \"parentId\": \"{{folderId}}\"\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Get Folder Children",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/folders/{{folderId}}/children",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "folders",
-                                "{{folderId}}",
-                                "children"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Get Breadcrumb",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/folders/{{folderId}}/breadcrumb",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "folders",
-                                "{{folderId}}",
-                                "breadcrumb"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Rename Folder",
-                    "request": {
-                        "method": "PUT",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/folders/{{folderId}}",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "folders",
-                                "{{folderId}}"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"name\": \"Renamed Folder\"\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Move Folder",
-                    "request": {
-                        "method": "PUT",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/folders/{{folderId}}",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "folders",
-                                "{{folderId}}"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"parentId\": null\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Delete Folder (Soft)",
-                    "request": {
-                        "method": "DELETE",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/folders/{{folderId}}",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "folders",
-                                "{{folderId}}"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Set Folder Permission",
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/folders/{{folderId}}/permissions",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "folders",
-                                "{{folderId}}",
-                                "permissions"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"canView\": true,\n  \"canEdit\": false\n}"
-                        }
-                    }
-                }
-            ]
-        },
-        {
-            "name": "📊 Admin – Sheets",
-            "item": [
-                {
-                    "name": "Create Sheet",
-                    "event": [
-                        {
-                            "listen": "test",
-                            "script": {
-                                "exec": [
-                                    "const r=pm.response.json(); if(r.data) pm.collectionVariables.set('sheetId',r.data.id);"
-                                ]
-                            }
-                        }
-                    ],
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/admin/sheets",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "admin",
-                                "sheets"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"name\": \"Sales Report\",\n  \"description\": \"Monthly sales data\",\n  \"folderId\": \"{{folderId}}\"\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "List Sheets",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/admin/sheets?page=1&limit=20&folderId={{folderId}}",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "admin",
-                                "sheets"
-                            ],
-                            "query": [
-                                {
-                                    "key": "page",
-                                    "value": "1"
-                                },
-                                {
-                                    "key": "limit",
-                                    "value": "20"
-                                },
-                                {
-                                    "key": "folderId",
-                                    "value": "{{folderId}}"
-                                }
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Get Sheet",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "admin",
-                                "sheets",
-                                "{{sheetId}}"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Update Sheet",
-                    "request": {
-                        "method": "PUT",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "admin",
-                                "sheets",
-                                "{{sheetId}}"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"name\": \"Updated Sheet Name\",\n  \"isLocked\": false\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Delete Sheet",
-                    "request": {
-                        "method": "DELETE",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "admin",
-                                "sheets",
-                                "{{sheetId}}"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Duplicate Sheet",
-                    "request": {
-                        "method": "POST",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/duplicate",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "admin",
-                                "sheets",
-                                "{{sheetId}}",
-                                "duplicate"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Share Sheet (with Column Privacy)",
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/share",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "admin",
-                                "sheets",
-                                "{{sheetId}}",
-                                "share"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"canView\": true,\n  \"canEdit\": false,\n  \"canEditFormulas\": false,\n  \"allowedColumnIds\": [\"col-uuid-1\", \"col-uuid-2\"]\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "List Permissions",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/permissions",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "admin",
-                                "sheets",
-                                "{{sheetId}}",
-                                "permissions"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "List Active Users in Sheet",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/active-users",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "admin",
-                                "sheets",
-                                "{{sheetId}}",
-                                "active-users"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Sheet Audit Log",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/audit?page=1&limit=50",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "admin",
-                                "sheets",
-                                "{{sheetId}}",
-                                "audit"
-                            ]
-                        }
-                    }
-                }
-            ]
-        },
-        {
-            "name": "📋 Admin – Columns",
-            "item": [
-                {
-                    "name": "Add Column",
-                    "event": [
-                        {
-                            "listen": "test",
-                            "script": {
-                                "exec": [
-                                    "const r=pm.response.json(); if(r.data) pm.collectionVariables.set('columnId',r.data.id);"
-                                ]
-                            }
-                        }
-                    ],
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/columns",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "admin",
-                                "sheets",
-                                "{{sheetId}}",
-                                "columns"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"name\": \"Price\",\n  \"type\": \"number\",\n  \"alignment\": \"right\",\n  \"width\": 130,\n  \"textColor\": \"#333333\",\n  \"bgColor\": \"#f9f9f9\",\n  \"validationRules\": { \"required\": true, \"min\": 0 },\n  \"defaultValue\": \"0\"\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Add Formula Column",
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/columns",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "admin",
-                                "sheets",
-                                "{{sheetId}}",
-                                "columns"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"name\": \"Total\",\n  \"type\": \"formula\",\n  \"formulaExpr\": \"=B*C\",\n  \"alignment\": \"right\",\n  \"width\": 150\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Update Column",
-                    "request": {
-                        "method": "PUT",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/columns/{{columnId}}",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "admin",
-                                "sheets",
-                                "{{sheetId}}",
-                                "columns",
-                                "{{columnId}}"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"name\": \"Unit Price\",\n  \"width\": 160,\n  \"textColor\": \"#0055cc\"\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Delete Column",
-                    "request": {
-                        "method": "DELETE",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/columns/{{columnId}}",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "admin",
-                                "sheets",
-                                "{{sheetId}}",
-                                "columns",
-                                "{{columnId}}"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Move Column Left",
-                    "request": {
-                        "method": "PATCH",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/columns/{{columnId}}/move-left",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "admin",
-                                "sheets",
-                                "{{sheetId}}",
-                                "columns",
-                                "{{columnId}}",
-                                "move-left"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Move Column Right",
-                    "request": {
-                        "method": "PATCH",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/columns/{{columnId}}/move-right",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "admin",
-                                "sheets",
-                                "{{sheetId}}",
-                                "columns",
-                                "{{columnId}}",
-                                "move-right"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Reorder Columns (Bulk)",
-                    "request": {
-                        "method": "PUT",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/columns/reorder",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "admin",
-                                "sheets",
-                                "{{sheetId}}",
-                                "columns",
-                                "reorder"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"columns\": [\n    { \"id\": \"col-uuid-1\", \"orderIndex\": 0 },\n    { \"id\": \"col-uuid-2\", \"orderIndex\": 1 },\n    { \"id\": \"col-uuid-3\", \"orderIndex\": 2 }\n  ]\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Toggle Column Hidden",
-                    "request": {
-                        "method": "PATCH",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/columns/{{columnId}}/toggle-hidden",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "admin",
-                                "sheets",
-                                "{{sheetId}}",
-                                "columns",
-                                "{{columnId}}",
-                                "toggle-hidden"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Toggle Column Locked",
-                    "request": {
-                        "method": "PATCH",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/columns/{{columnId}}/toggle-locked",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "admin",
-                                "sheets",
-                                "{{sheetId}}",
-                                "columns",
-                                "{{columnId}}",
-                                "toggle-locked"
-                            ]
-                        }
-                    }
-                }
-            ]
-        },
-        {
-            "name": "📝 Sheet Data – Rows & Cells",
-            "item": [
-                {
-                    "name": "Get Sheet Grid Data",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/data?page=1&limit=50",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "sheets",
-                                "{{sheetId}}",
-                                "data"
-                            ],
-                            "query": [
-                                {
-                                    "key": "page",
-                                    "value": "1"
-                                },
-                                {
-                                    "key": "limit",
-                                    "value": "50"
-                                }
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Add Row",
-                    "event": [
-                        {
-                            "listen": "test",
-                            "script": {
-                                "exec": [
-                                    "const r=pm.response.json(); if(r.data) pm.collectionVariables.set('rowId',r.data.id);"
-                                ]
-                            }
-                        }
-                    ],
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/rows",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "sheets",
-                                "{{sheetId}}",
-                                "rows"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"rowColor\": \"#fff3cd\",\n  \"height\": 40\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Bulk Insert Rows",
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/rows/bulk",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "sheets",
-                                "{{sheetId}}",
-                                "rows",
-                                "bulk"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"rows\": [\n    { \"cells\": [{\"columnId\": \"col-uuid-1\", \"rawValue\": \"Apple\"}, {\"columnId\": \"col-uuid-2\", \"rawValue\": \"10\"}] },\n    { \"cells\": [{\"columnId\": \"col-uuid-1\", \"rawValue\": \"Mango\"}, {\"columnId\": \"col-uuid-2\", \"rawValue\": \"5\"}] }\n  ]\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Reorder Row",
-                    "request": {
-                        "method": "PATCH",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/rows/{{rowId}}/order",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "sheets",
-                                "{{sheetId}}",
-                                "rows",
-                                "{{rowId}}",
-                                "order"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"newOrder\": 2\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Update Row Color",
-                    "request": {
-                        "method": "PATCH",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/rows/{{rowId}}/color",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "sheets",
-                                "{{sheetId}}",
-                                "rows",
-                                "{{rowId}}",
-                                "color"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"rowColor\": \"#d4edda\"\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Delete Row",
-                    "request": {
-                        "method": "DELETE",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/rows/{{rowId}}",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "sheets",
-                                "{{sheetId}}",
-                                "rows",
-                                "{{rowId}}"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Upsert Cell",
-                    "event": [
-                        {
-                            "listen": "test",
-                            "script": {
-                                "exec": [
-                                    "const r=pm.response.json(); if(r.data) pm.collectionVariables.set('cellId',r.data.id);"
-                                ]
-                            }
-                        }
-                    ],
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/cells",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "sheets",
-                                "{{sheetId}}",
-                                "cells"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"rowId\": \"{{rowId}}\",\n  \"columnId\": \"{{columnId}}\",\n  \"rawValue\": \"1500.00\",\n  \"formattedValue\": \"₹1,500.00\"\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Update Cell",
-                    "request": {
-                        "method": "PUT",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/cells/{{cellId}}",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "sheets",
-                                "{{sheetId}}",
-                                "cells",
-                                "{{cellId}}"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"rawValue\": \"2000.00\",\n  \"formattedValue\": \"₹2,000.00\"\n}"
-                        }
-                    }
-                }
-            ]
-        },
-        {
-            "name": "💬 Comments",
-            "item": [
-                {
-                    "name": "Add Comment",
-                    "event": [
-                        {
-                            "listen": "test",
-                            "script": {
-                                "exec": [
-                                    "const r=pm.response.json(); if(r.data) pm.collectionVariables.set('commentId',r.data.id);"
-                                ]
-                            }
-                        }
-                    ],
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/cells/{{cellId}}/comments",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "sheets",
-                                "{{sheetId}}",
-                                "cells",
-                                "{{cellId}}",
-                                "comments"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"text\": \"This value looks incorrect, please verify.\"\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "List Comments for Cell",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/cells/{{cellId}}/comments",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "sheets",
-                                "{{sheetId}}",
-                                "cells",
-                                "{{cellId}}",
-                                "comments"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Edit Comment",
-                    "request": {
-                        "method": "PUT",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/cells/{{cellId}}/comments/{{commentId}}",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "sheets",
-                                "{{sheetId}}",
-                                "cells",
-                                "{{cellId}}",
-                                "comments",
-                                "{{commentId}}"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"text\": \"Updated comment text.\"\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Delete Comment",
-                    "request": {
-                        "method": "DELETE",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/cells/{{cellId}}/comments/{{commentId}}",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "sheets",
-                                "{{sheetId}}",
-                                "cells",
-                                "{{cellId}}",
-                                "comments",
-                                "{{commentId}}"
-                            ]
-                        }
-                    }
-                }
-            ]
-        },
-        {
-            "name": "💬 Chat – Rooms",
-            "item": [
-                {
-                    "name": "Create Chat Room",
-                    "event": [
-                        {
-                            "listen": "test",
-                            "script": {
-                                "exec": [
-                                    "const r=pm.response.json(); if(r.data) pm.collectionVariables.set('roomId',r.data.id);"
-                                ]
-                            }
-                        }
-                    ],
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/chat/rooms",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "chat",
-                                "rooms"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"spreadsheetId\": \"{{sheetId}}\",\n  \"name\": \"Sheet General Chat\"\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "List Chat Rooms",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/chat/rooms?sheetId={{sheetId}}",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "chat",
-                                "rooms"
-                            ],
-                            "query": [
-                                {
-                                    "key": "sheetId",
-                                    "value": "{{sheetId}}"
-                                }
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Get Room Messages",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/chat/rooms/{{roomId}}/messages?page=1&limit=50",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "chat",
-                                "rooms",
-                                "{{roomId}}",
-                                "messages"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Send Text Message to Room",
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/chat/rooms/{{roomId}}/messages",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "chat",
-                                "rooms",
-                                "{{roomId}}",
-                                "messages"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"message\": \"Hello team! 👋\"\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Send Audio to Room",
-                    "request": {
-                        "method": "POST",
-                        "header": [],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/chat/rooms/{{roomId}}/audio",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "chat",
-                                "rooms",
-                                "{{roomId}}",
-                                "audio"
-                            ]
-                        },
-                        "body": {
-                            "mode": "formdata",
-                            "formdata": [
-                                {
-                                    "key": "audio",
-                                    "type": "file",
-                                    "src": "/path/to/voice.mp3",
-                                    "description": "Audio file (mp3/wav/webm/ogg, max 25MB)"
-                                },
-                                {
-                                    "key": "duration",
-                                    "value": "12",
-                                    "type": "text",
-                                    "description": "Duration in seconds (optional)"
-                                }
-                            ]
-                        }
-                    }
-                }
-            ]
-        },
-        {
-            "name": "📩 Personal Chat (DM)",
-            "item": [
-                {
-                    "name": "Get Inbox",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/dm/inbox",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "dm",
-                                "inbox"
-                            ]
-                        },
-                        "description": "Returns all conversations with latest message and unread count per user."
-                    }
-                },
-                {
-                    "name": "Get Conversation History",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/dm/{{userId}}?page=1&limit=50",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "dm",
-                                "{{userId}}"
-                            ],
-                            "query": [
-                                {
-                                    "key": "page",
-                                    "value": "1"
-                                },
-                                {
-                                    "key": "limit",
-                                    "value": "50"
-                                }
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Send Text DM",
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/dm/{{userId}}",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "dm",
-                                "{{userId}}"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"message\": \"Hey! Can you check the Q1 budget sheet?\",\n  \"fileType\": \"text\"\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Send Audio DM (Voice Note)",
-                    "request": {
-                        "method": "POST",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/dm/{{userId}}/audio",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "dm",
-                                "{{userId}}",
-                                "audio"
-                            ]
-                        },
-                        "body": {
-                            "mode": "formdata",
-                            "formdata": [
-                                {
-                                    "key": "audio",
-                                    "type": "file",
-                                    "src": "/path/to/voicenote.webm",
-                                    "description": "Audio file (mp3/wav/webm/ogg/m4a, max 25MB)"
-                                },
-                                {
-                                    "key": "duration",
-                                    "value": "8",
-                                    "type": "text",
-                                    "description": "Audio duration in seconds"
-                                }
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Mark Conversation as Read",
-                    "request": {
-                        "method": "PUT",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/dm/{{userId}}/read",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "dm",
-                                "{{userId}}",
-                                "read"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Delete My Message",
-                    "request": {
-                        "method": "DELETE",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/dm/messages/{{messageId}}",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "dm",
-                                "messages",
-                                "{{messageId}}"
-                            ]
-                        }
-                    }
-                }
-            ]
-        },
-        {
-            "name": "🗂️ Media",
-            "item": [
-                {
-                    "name": "Upload File",
-                    "request": {
-                        "method": "POST",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/media/upload",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "media",
-                                "upload"
-                            ]
-                        },
-                        "body": {
-                            "mode": "formdata",
-                            "formdata": [
-                                {
-                                    "key": "file",
-                                    "type": "file",
-                                    "src": "/path/to/file.pdf"
-                                }
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "List Files",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/media",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "media"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Get File",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/media/:id",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "media",
-                                ":id"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Delete File",
-                    "request": {
-                        "method": "DELETE",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/media/:id",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "media",
-                                ":id"
-                            ]
-                        }
-                    }
-                }
-            ]
-        },
-        {
-            "name": "📦 Inventory",
-            "item": [
-                {
-                    "name": "Create Item",
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/inventory",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "inventory"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"spreadsheetId\": \"{{sheetId}}\",\n  \"name\": \"Laptop\",\n  \"sku\": \"LAP-001\",\n  \"quantity\": 10,\n  \"unit\": \"pcs\",\n  \"price\": 45000,\n  \"lowStockThreshold\": 2\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "List Items",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/inventory?page=1&limit=20",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "inventory"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Get Item",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/inventory/:id",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "inventory",
-                                ":id"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Update Item",
-                    "request": {
-                        "method": "PUT",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/inventory/:id",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "inventory",
-                                ":id"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"quantity\": 15,\n  \"price\": 44000\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Delete Item",
-                    "request": {
-                        "method": "DELETE",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/inventory/:id",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "inventory",
-                                ":id"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Low Stock Alerts",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/inventory/alerts/low-stock",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "inventory",
-                                "alerts",
-                                "low-stock"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Inventory Summary",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/inventory/summary",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "inventory",
-                                "summary"
-                            ]
-                        }
-                    }
-                }
-            ]
-        },
-        {
-            "name": "🔍 Audit Logs",
-            "item": [
-                {
-                    "name": "Get All Logs",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/audit?page=1&limit=50",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "audit"
-                            ],
-                            "query": [
-                                {
-                                    "key": "page",
-                                    "value": "1"
-                                },
-                                {
-                                    "key": "limit",
-                                    "value": "50"
-                                }
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Export Logs",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/audit/export",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "audit",
-                                "export"
-                            ]
-                        }
-                    }
-                }
-            ]
-        },
-        {
-            "name": "👑 SuperAdmin",
-            "item": [
-                {
-                    "name": "Analytics",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/superadmin/analytics",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "superadmin",
-                                "analytics"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "List All Users",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/superadmin/users",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "superadmin",
-                                "users"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Create User",
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/superadmin/users",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "superadmin",
-                                "users"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"name\": \"New Admin\",\n  \"email\": \"newadmin@example.com\",\n  \"password\": \"Admin@123\",\n  \"role\": \"admin\"\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Update User",
-                    "request": {
-                        "method": "PUT",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/superadmin/users/{{userId}}",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "superadmin",
-                                "users",
-                                "{{userId}}"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"role\": \"admin\",\n  \"isActive\": true\n}"
-                        }
-                    }
-                },
-                {
-                    "name": "Delete User",
-                    "request": {
-                        "method": "DELETE",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/superadmin/users/{{userId}}",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "superadmin",
-                                "users",
-                                "{{userId}}"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Backup",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/api/superadmin/backup",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "superadmin",
-                                "backup"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "Restore",
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{baseUrl}}/api/superadmin/restore",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "superadmin",
-                                "restore"
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"backupFile\": \"backup-2026-03-05.json\"\n}"
-                        }
-                    }
-                }
-            ]
-        },
-        {
-            "name": "⚙️ Health",
-            "item": [
-                {
-                    "name": "Health Check",
-                    "request": {
-                        "auth": {
-                            "type": "noauth"
-                        },
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{baseUrl}}/health",
-                            "host": [
-                                "{{baseUrl}}"
-                            ],
-                            "path": [
-                                "health"
-                            ]
-                        }
-                    }
-                }
-            ]
-        }
+    {
+      "key": "refreshToken",
+      "value": ""
+    },
+    {
+      "key": "sheetId",
+      "value": ""
+    },
+    {
+      "key": "folderId",
+      "value": ""
+    },
+    {
+      "key": "userId",
+      "value": ""
+    },
+    {
+      "key": "columnId",
+      "value": ""
+    },
+    {
+      "key": "rowId",
+      "value": ""
+    },
+    {
+      "key": "cellId",
+      "value": ""
+    },
+    {
+      "key": "commentId",
+      "value": ""
+    },
+    {
+      "key": "roomId",
+      "value": ""
+    },
+    {
+      "key": "messageId",
+      "value": ""
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
     ]
+  },
+  "item": [
+    {
+      "name": "🔐 Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"Password@123\",\n  \"phone\": \"9876543210\",\n  \"role\": \"staff\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Send Login OTP",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9074054046\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/send-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "send-otp"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Login OTP",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9074054046\",\n  \"otp\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/verify-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "verify-otp"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if(r.data){",
+                  "  pm.collectionVariables.set('token', r.data.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', r.data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john@example.com\",\n  \"password\": \"Password@123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if(r.data){",
+                  "  pm.collectionVariables.set('token', r.data.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', r.data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "refresh"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "logout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/user/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List All Users (Admin)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/user?page=1&limit=20&role=staff",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "role",
+                  "value": "staff"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "{{userId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\",\n  \"phone\": \"9000000000\",\n  \"avatar\": \"https://example.com/avatar.jpg\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Deactivate User",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/user/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "{{userId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📁 Folders",
+      "item": [
+        {
+          "name": "Get Full Folder Tree",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/folders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "folders"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Folder (Root)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r=pm.response.json(); if(r.data) pm.collectionVariables.set('folderId',r.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/folders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "folders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Projects\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Subfolder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/folders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "folders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Q1 Budget\",\n  \"parentId\": \"{{folderId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Folder Children",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/folders/{{folderId}}/children",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "folders",
+                "{{folderId}}",
+                "children"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Breadcrumb",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/folders/{{folderId}}/breadcrumb",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "folders",
+                "{{folderId}}",
+                "breadcrumb"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Rename Folder",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/folders/{{folderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "folders",
+                "{{folderId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Renamed Folder\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Move Folder",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/folders/{{folderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "folders",
+                "{{folderId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parentId\": null\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Folder (Soft)",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/folders/{{folderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "folders",
+                "{{folderId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Set Folder Permission",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/folders/{{folderId}}/permissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "folders",
+                "{{folderId}}",
+                "permissions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"canView\": true,\n  \"canEdit\": false\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📊 Admin – Sheets",
+      "item": [
+        {
+          "name": "Create Sheet",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r=pm.response.json(); if(r.data) pm.collectionVariables.set('sheetId',r.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sheets",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sheets"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sales Report\",\n  \"description\": \"Monthly sales data\",\n  \"folderId\": \"{{folderId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List Sheets",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sheets?page=1&limit=20&folderId={{folderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sheets"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "folderId",
+                  "value": "{{folderId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Sheet",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sheets",
+                "{{sheetId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Sheet",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sheets",
+                "{{sheetId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Sheet Name\",\n  \"isLocked\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Sheet",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sheets",
+                "{{sheetId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Duplicate Sheet",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/duplicate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sheets",
+                "{{sheetId}}",
+                "duplicate"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Share Sheet (with Column Privacy)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/share",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sheets",
+                "{{sheetId}}",
+                "share"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"canView\": true,\n  \"canEdit\": false,\n  \"canEditFormulas\": false,\n  \"allowedColumnIds\": [\"col-uuid-1\", \"col-uuid-2\"]\n}"
+            }
+          }
+        },
+        {
+          "name": "List Permissions",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/permissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sheets",
+                "{{sheetId}}",
+                "permissions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Active Users in Sheet",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/active-users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sheets",
+                "{{sheetId}}",
+                "active-users"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Sheet Audit Log",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/audit?page=1&limit=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sheets",
+                "{{sheetId}}",
+                "audit"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📋 Admin – Columns",
+      "item": [
+        {
+          "name": "Add Column",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r=pm.response.json(); if(r.data) pm.collectionVariables.set('columnId',r.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/columns",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sheets",
+                "{{sheetId}}",
+                "columns"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Price\",\n  \"type\": \"number\",\n  \"alignment\": \"right\",\n  \"width\": 130,\n  \"textColor\": \"#333333\",\n  \"bgColor\": \"#f9f9f9\",\n  \"validationRules\": { \"required\": true, \"min\": 0 },\n  \"defaultValue\": \"0\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Add Formula Column",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/columns",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sheets",
+                "{{sheetId}}",
+                "columns"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Total\",\n  \"type\": \"formula\",\n  \"formulaExpr\": \"=B*C\",\n  \"alignment\": \"right\",\n  \"width\": 150\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Column",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/columns/{{columnId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sheets",
+                "{{sheetId}}",
+                "columns",
+                "{{columnId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Unit Price\",\n  \"width\": 160,\n  \"textColor\": \"#0055cc\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Column",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/columns/{{columnId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sheets",
+                "{{sheetId}}",
+                "columns",
+                "{{columnId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Move Column Left",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/columns/{{columnId}}/move-left",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sheets",
+                "{{sheetId}}",
+                "columns",
+                "{{columnId}}",
+                "move-left"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Move Column Right",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/columns/{{columnId}}/move-right",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sheets",
+                "{{sheetId}}",
+                "columns",
+                "{{columnId}}",
+                "move-right"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reorder Columns (Bulk)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/columns/reorder",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sheets",
+                "{{sheetId}}",
+                "columns",
+                "reorder"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"columns\": [\n    { \"id\": \"col-uuid-1\", \"orderIndex\": 0 },\n    { \"id\": \"col-uuid-2\", \"orderIndex\": 1 },\n    { \"id\": \"col-uuid-3\", \"orderIndex\": 2 }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Toggle Column Hidden",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/columns/{{columnId}}/toggle-hidden",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sheets",
+                "{{sheetId}}",
+                "columns",
+                "{{columnId}}",
+                "toggle-hidden"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Toggle Column Locked",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sheets/{{sheetId}}/columns/{{columnId}}/toggle-locked",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sheets",
+                "{{sheetId}}",
+                "columns",
+                "{{columnId}}",
+                "toggle-locked"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📝 Sheet Data – Rows & Cells",
+      "item": [
+        {
+          "name": "Get Sheet Grid Data",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/data?page=1&limit=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sheets",
+                "{{sheetId}}",
+                "data"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Add Row",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r=pm.response.json(); if(r.data) pm.collectionVariables.set('rowId',r.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/rows",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sheets",
+                "{{sheetId}}",
+                "rows"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rowColor\": \"#fff3cd\",\n  \"height\": 40\n}"
+            }
+          }
+        },
+        {
+          "name": "Bulk Insert Rows",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/rows/bulk",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sheets",
+                "{{sheetId}}",
+                "rows",
+                "bulk"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rows\": [\n    { \"cells\": [{\"columnId\": \"col-uuid-1\", \"rawValue\": \"Apple\"}, {\"columnId\": \"col-uuid-2\", \"rawValue\": \"10\"}] },\n    { \"cells\": [{\"columnId\": \"col-uuid-1\", \"rawValue\": \"Mango\"}, {\"columnId\": \"col-uuid-2\", \"rawValue\": \"5\"}] }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Reorder Row",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/rows/{{rowId}}/order",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sheets",
+                "{{sheetId}}",
+                "rows",
+                "{{rowId}}",
+                "order"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newOrder\": 2\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Row Color",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/rows/{{rowId}}/color",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sheets",
+                "{{sheetId}}",
+                "rows",
+                "{{rowId}}",
+                "color"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rowColor\": \"#d4edda\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Row",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/rows/{{rowId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sheets",
+                "{{sheetId}}",
+                "rows",
+                "{{rowId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upsert Cell",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r=pm.response.json(); if(r.data) pm.collectionVariables.set('cellId',r.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/cells",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sheets",
+                "{{sheetId}}",
+                "cells"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rowId\": \"{{rowId}}\",\n  \"columnId\": \"{{columnId}}\",\n  \"rawValue\": \"1500.00\",\n  \"formattedValue\": \"₹1,500.00\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Cell",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/cells/{{cellId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sheets",
+                "{{sheetId}}",
+                "cells",
+                "{{cellId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rawValue\": \"2000.00\",\n  \"formattedValue\": \"₹2,000.00\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "💬 Comments",
+      "item": [
+        {
+          "name": "Add Comment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r=pm.response.json(); if(r.data) pm.collectionVariables.set('commentId',r.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/cells/{{cellId}}/comments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sheets",
+                "{{sheetId}}",
+                "cells",
+                "{{cellId}}",
+                "comments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"This value looks incorrect, please verify.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List Comments for Cell",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/cells/{{cellId}}/comments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sheets",
+                "{{sheetId}}",
+                "cells",
+                "{{cellId}}",
+                "comments"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Edit Comment",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/cells/{{cellId}}/comments/{{commentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sheets",
+                "{{sheetId}}",
+                "cells",
+                "{{cellId}}",
+                "comments",
+                "{{commentId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Updated comment text.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Comment",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/sheets/{{sheetId}}/cells/{{cellId}}/comments/{{commentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sheets",
+                "{{sheetId}}",
+                "cells",
+                "{{cellId}}",
+                "comments",
+                "{{commentId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "💬 Chat – Rooms",
+      "item": [
+        {
+          "name": "Create Chat Room",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r=pm.response.json(); if(r.data) pm.collectionVariables.set('roomId',r.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/rooms",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chat",
+                "rooms"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"spreadsheetId\": \"{{sheetId}}\",\n  \"name\": \"Sheet General Chat\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List Chat Rooms",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/rooms?sheetId={{sheetId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chat",
+                "rooms"
+              ],
+              "query": [
+                {
+                  "key": "sheetId",
+                  "value": "{{sheetId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Room Messages",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/rooms/{{roomId}}/messages?page=1&limit=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send Text Message to Room",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/rooms/{{roomId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Hello team! 👋\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Send Audio to Room",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/rooms/{{roomId}}/audio",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "audio"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "audio",
+                  "type": "file",
+                  "src": "/path/to/voice.mp3",
+                  "description": "Audio file (mp3/wav/webm/ogg, max 25MB)"
+                },
+                {
+                  "key": "duration",
+                  "value": "12",
+                  "type": "text",
+                  "description": "Duration in seconds (optional)"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📩 Personal Chat (DM)",
+      "item": [
+        {
+          "name": "Get Inbox",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/dm/inbox",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dm",
+                "inbox"
+              ]
+            },
+            "description": "Returns all conversations with latest message and unread count per user."
+          }
+        },
+        {
+          "name": "Get Conversation History",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/dm/{{userId}}?page=1&limit=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dm",
+                "{{userId}}"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send Text DM",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dm/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dm",
+                "{{userId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Hey! Can you check the Q1 budget sheet?\",\n  \"fileType\": \"text\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Send Audio DM (Voice Note)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/dm/{{userId}}/audio",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dm",
+                "{{userId}}",
+                "audio"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "audio",
+                  "type": "file",
+                  "src": "/path/to/voicenote.webm",
+                  "description": "Audio file (mp3/wav/webm/ogg/m4a, max 25MB)"
+                },
+                {
+                  "key": "duration",
+                  "value": "8",
+                  "type": "text",
+                  "description": "Audio duration in seconds"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Mark Conversation as Read",
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{baseUrl}}/api/dm/{{userId}}/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dm",
+                "{{userId}}",
+                "read"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete My Message",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/dm/messages/{{messageId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dm",
+                "messages",
+                "{{messageId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🗂️ Media",
+      "item": [
+        {
+          "name": "Upload File",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/media/upload",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "media",
+                "upload"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/file.pdf"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Files",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/media",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "media"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get File",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/media/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "media",
+                ":id"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete File",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/media/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "media",
+                ":id"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📦 Inventory",
+      "item": [
+        {
+          "name": "Create Item",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/inventory",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"spreadsheetId\": \"{{sheetId}}\",\n  \"name\": \"Laptop\",\n  \"sku\": \"LAP-001\",\n  \"quantity\": 10,\n  \"unit\": \"pcs\",\n  \"price\": 45000,\n  \"lowStockThreshold\": 2\n}"
+            }
+          }
+        },
+        {
+          "name": "List Items",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/inventory?page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Item",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/inventory/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory",
+                ":id"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Item",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/inventory/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory",
+                ":id"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 15,\n  \"price\": 44000\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Item",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/inventory/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory",
+                ":id"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Low Stock Alerts",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/inventory/alerts/low-stock",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory",
+                "alerts",
+                "low-stock"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Inventory Summary",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/inventory/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory",
+                "summary"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔍 Audit Logs",
+      "item": [
+        {
+          "name": "Get All Logs",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/audit?page=1&limit=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "audit"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Export Logs",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/audit/export",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "audit",
+                "export"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👑 SuperAdmin",
+      "item": [
+        {
+          "name": "Analytics",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/superadmin/analytics",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "superadmin",
+                "analytics"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List All Users",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/superadmin/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "superadmin",
+                "users"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/superadmin/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "superadmin",
+                "users"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Admin\",\n  \"email\": \"newadmin@example.com\",\n  \"password\": \"Admin@123\",\n  \"role\": \"admin\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/superadmin/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "superadmin",
+                "users",
+                "{{userId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"admin\",\n  \"isActive\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/superadmin/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "superadmin",
+                "users",
+                "{{userId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Backup",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/superadmin/backup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "superadmin",
+                "backup"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Restore",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/superadmin/restore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "superadmin",
+                "restore"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"backupFile\": \"backup-2026-03-05.json\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "⚙️ Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
 }

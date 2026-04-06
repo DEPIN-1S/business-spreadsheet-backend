@@ -94,19 +94,55 @@ function resolveCellRefs(expr, cellMap) {
     });
 }
 
+// Preprocess expression: implied multiplication and percentage conversion
+function preprocessExpression(expr) {
+    if (!expr) return "";
+    
+    let processed = expr
+        .replace(/(\d)\s*\(/g, '$1*(')      // 2( -> 2*(
+        .replace(/\)\s*(\d)/g, ')*$1')      // )2 -> )*2
+        .replace(/\)\s*\(/g, ')*(');         // )( -> )*(
+
+    // Convert percentages within expressions: e.g. 10% -> (10/100)
+    processed = processed.replace(/(\d+(?:\.\d+)?)\s*%/g, '($1/100)');
+
+    // Convert (expr)% -> ((expr)/100)
+    while (processed.includes(")%")) {
+        const idx = processed.indexOf(")%");
+        let openIdx = -1;
+        let depth = 0;
+        for (let i = idx - 1; i >= 0; i--) {
+            if (processed[i] === ')') depth++;
+            else if (processed[i] === '(') {
+                if (depth === 0) { openIdx = i; break; }
+                depth--;
+            }
+        }
+        if (openIdx !== -1) {
+            processed = processed.substring(0, openIdx) + "((" + processed.substring(openIdx + 1, idx) + ")/100)" + processed.substring(idx + 2);
+        } else {
+            processed = processed.replace(")%", ")/100");
+        }
+    }
+    
+    return processed;
+}
+
 // Safe numeric evaluator (no eval) using Function constructor with strict whitelist check
 function safeEval(expr) {
     // Allow only safe characters: digits, operators, parens, spaces, dots, quotes, commas, modulo
     const safe = /^[\d\s+\-*/%().,<>=!"&|?:'"a-zA-Z_]+$/.test(expr);
     if (!safe) throw new Error(`Unsafe formula expression: ${expr}`);
+    const processed = preprocessExpression(expr);
+    if (expr !== processed) console.log(`[FormulaEngine] Processed expression: "${expr}" -> "${processed}"`);
     try {
         // eslint-disable-next-line no-new-func
-        const result = Function(`"use strict"; return (${expr})`)();
+        const result = Function(`"use strict"; return (${processed})`)();
         // Guard: division by zero produces Infinity, coerce to 0
         if (typeof result === "number" && !isFinite(result)) return 0;
         return result;
-    } catch {
-        throw new Error(`Cannot evaluate expression: ${expr}`);
+    } catch (e) {
+        throw new Error(`Cannot evaluate expression: ${expr} (Reason: ${e.message})`);
     }
 }
 
@@ -179,7 +215,7 @@ export function evaluate(formula, cellMap = {}) {
         const condition = resolveCellRefs(parts[0], cellMap);
         const trueVal = parts[1].trim();
         const falseVal = parts[2].trim();
-        const condResult = safeEval(condition);
+        const condResult = safeEval(preprocessExpression(condition));
         return condResult ? trueVal : falseVal;
     });
 
@@ -231,33 +267,11 @@ export function evaluate(formula, cellMap = {}) {
     // Resolve remaining cell refs
     expr = resolveCellRefs(expr, cellMap);
 
-    // Convert percentages within expressions: e.g. 10% -> (10/100)
-    expr = expr.replace(/(\d+(?:\.\d+)?)\s*%/g, '($1/100)');
-
-    // Convert (expr)% -> ((expr)/100)
-    while (expr.includes(")%")) {
-        const idx = expr.indexOf(")%");
-        let openIdx = -1;
-        let depth = 0;
-        for (let i = idx - 1; i >= 0; i--) {
-            if (expr[i] === ')') depth++;
-            else if (expr[i] === '(') {
-                if (depth === 0) { openIdx = i; break; }
-                depth--;
-            }
-        }
-        if (openIdx !== -1) {
-            expr = expr.substring(0, openIdx) + "((" + expr.substring(openIdx + 1, idx) + ")/100)" + expr.substring(idx + 2);
-        } else {
-            expr = expr.replace(")%", ")/100");
-        }
-    }
-
-    // Final evaluation
-    let result = safeEval(expr);
+    // Final evaluation with preprocessing (implied mult, percentages)
+    let result = safeEval(preprocessExpression(expr));
     if (typeof result === "number" && !isNaN(result)) {
-        // Fix JS floating point drift
-        result = parseFloat(result.toFixed(8));
+        // Round to 1 decimal place as per user requirement
+        result = parseFloat(result.toFixed(1));
     } else if (typeof result === "number" && isNaN(result)) {
         // Guard: NaN from invalid arithmetic → return 0
         result = 0;

@@ -7,7 +7,6 @@ import sequelize from "../../config/db.js";
 import { getPagination, getMeta } from "../../utils/pagination.js";
 import AppError from "../../utils/AppError.js";
 import { logAction } from "../../utils/auditLogger.js";
-import bcrypt from "bcryptjs";
 import fs from "fs";
 import path from "path";
 
@@ -41,12 +40,15 @@ export const listUsers = async (req, res, next) => {
 
 export const createUser = async (req, res, next) => {
   try {
-    const existing = await User.findOne({ where: { email: req.body.email } });
-    if (existing) throw new AppError("Email already registered", 409);
-    const hash = await bcrypt.hash(req.body.password, 10);
-    const user = await User.create({ ...req.body, password: hash, createdBy: req.user.id });
-    await logAction(req.user.id, "user", user.id, "create", null, { email: user.email, role: user.role }, req);
-    res.status(201).json({ data: { id: user.id, name: user.name, email: user.email, role: user.role } });
+    const existing = await User.findOne({ where: { phone: req.body.phone } });
+    if (existing) throw new AppError("Phone already registered", 409);
+    
+    // Remove password from req.body if it exists
+    const { password, ...userData } = req.body;
+    
+    const user = await User.create({ ...userData, createdBy: req.user.id });
+    await logAction(req.user.id, "user", user.id, "create", null, { phone: user.phone, role: user.role }, req);
+    res.status(201).json({ data: { id: user.id, name: user.name, phone: user.phone, role: user.role } });
   } catch (e) { next(e); }
 };
 
@@ -55,9 +57,12 @@ export const updateUser = async (req, res, next) => {
     const user = await User.findByPk(req.params.id);
     if (!user) throw new AppError("User not found", 404);
     const old = user.toJSON();
-    if (req.body.password) req.body.password = await bcrypt.hash(req.body.password, 10);
-    await user.update(req.body);
-    await logAction(req.user.id, "user", user.id, "update", old, req.body, req);
+    
+    // Remove password from req.body to prevent accidental overrides or issues
+    const { password, ...updateData } = req.body;
+    
+    await user.update(updateData);
+    await logAction(req.user.id, "user", user.id, "update", old, updateData, req);
     res.json({ data: { id: user.id, name: user.name, role: user.role } });
   } catch (e) { next(e); }
 };
@@ -91,7 +96,8 @@ export const restore = async (req, res, next) => {
     // Minimal restore: upsert users from backup payload
     const { users = [] } = req.body;
     for (const u of users) {
-      await User.upsert({ ...u, password: u.password || await bcrypt.hash("TempPass@123", 10) });
+      const { password, ...userData } = u;
+      await User.upsert({ ...userData });
     }
     await logAction(req.user.id, "user", "restore", "create", null, { restored: users.length }, req);
     res.json({ message: `Restore complete: ${users.length} users processed` });

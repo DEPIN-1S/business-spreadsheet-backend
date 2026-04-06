@@ -5,6 +5,7 @@ import AppError from "../../utils/AppError.js";
 import { logAction } from "../../utils/auditLogger.js";
 import { Op } from "sequelize";
 import sequelize from "../../config/db.js";
+import { copySheetInternal } from "./spreadsheet.controller.js";
 
 // ── Helper: check for circular parentId assignment ───────────────────────────
 async function wouldCreateCycle(folderId, newParentId) {
@@ -175,5 +176,51 @@ export const setFolderPermission = async (req, res, next) => {
             { returning: true }
         );
         res.status(created ? 201 : 200).json({ data: Array.isArray(perm) ? perm[0] : perm, message: "Permission set" });
+    } catch (e) { next(e); }
+};
+
+/**
+ * Internal recursive helper to duplicate a folder and its content.
+ */
+async function copyFolderInternal(originalFolderId, newParentId, newName, userId, transaction) {
+    const original = await Folder.findOne({ where: { id: originalFolderId, isDeleted: false }, transaction });
+    if (!original) throw new AppError(`Folder ${originalFolderId} not found`, 404);
+
+    const folder = await Folder.create({
+        name: newName || original.name,
+        parentId: newParentId,
+        createdBy: userId
+    }, { transaction });
+
+    // 1. Copy all sheets in this folder
+    const sheets = await Spreadsheet.findAll({ where: { folderId: originalFolderId, isDeleted: false }, transaction });
+    for (const sheet of sheets) {
+        await copySheetInternal(sheet.id, folder.id, sheet.name, userId, transaction);
+    }
+
+    // 2. Recursively copy sub-folders
+    const children = await Folder.findAll({ where: { parentId: originalFolderId, isDeleted: false }, transaction });
+    for (const child of children) {
+        await copyFolderInternal(child.id, folder.id, child.name, userId, transaction);
+    }
+
+    return folder;
+}
+
+export const duplicateFolder = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { name: newRequestedName } = req.body;
+
+        const original = await Folder.findOne({ where: { id, isDeleted: false } });
+        if (!original) throw new AppError("Folder not found", 404);
+
+        let newFolder;
+        await sequelize.transaction(async (t) => {
+            newFolder = await copyFolderInternal(id, original.parentId, newRequestedName || `${original.name} (Copy)`, req.user.id, t);
+        });
+
+        await logAction(req.user.id, "folder", newFolder.id, "create", null, { duplicatedFrom: id }, req);
+        res.status(201).json({ data: newFolder, message: "Folder duplicated" });
     } catch (e) { next(e); }
 };
