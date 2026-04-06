@@ -79,8 +79,7 @@ export const sendLoginOtp = async (req, res, next) => {
       const TEMPLATE_ID = process.env.MSG91_TEMPLATE_ID;
       const AUTH_KEY = process.env.MSG91_AUTH_KEY;
       const SENDER_ID = process.env.MSG91_SENDER_ID;
-      console.log("MSG91_TEMPLATE_ID:", process.env.MSG91_TEMPLATE_ID);
-      console.log("MSG91_SENDER_ID:", process.env.MSG91_SENDER_ID);
+    
       
       // Generate exactly 4 digits for the OTP
       const generatedOtp = Math.floor(1000 + Math.random() * 9000).toString();
@@ -95,8 +94,6 @@ export const sendLoginOtp = async (req, res, next) => {
           }
         ]
       };
-
-      console.log("MSG91 payload:", JSON.stringify(payload, null, 2));
 
       const url = "https://control.msg91.com/api/v5/flow/";
       const response = await fetch(url, { 
