@@ -14,6 +14,7 @@ const Cell = sequelize.define("Cell", {
     currencyCode: { type: DataTypes.STRING(3), allowNull: true, defaultValue: null },
     fileUrl: { type: DataTypes.STRING, allowNull: true },      // for image/video columns
     updatedBy: { type: DataTypes.UUID, allowNull: true },
+    nestedSheetId: { type: DataTypes.UUID, allowNull: true },
     isDeleted: { type: DataTypes.BOOLEAN, defaultValue: false }
 }, {
     tableName: "cells",

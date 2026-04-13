@@ -164,6 +164,7 @@ export const getSheetData = async (req, res, next) => {
                     bgColor: cell?.bgColor ?? null,
                     isBold: cell?.isBold ?? false,
                     isItalic: cell?.isItalic ?? false,
+                    nestedSheetId: cell?.nestedSheetId ?? null,
                     ref: `${indexToLetter(ci)}${ri + 1 + offset}`
                 };
             })
@@ -192,7 +193,7 @@ export const getSheetData = async (req, res, next) => {
 export const updateCell = async (req, res, next) => {
     try {
         const { id: spreadsheetId, cellId } = req.params;
-        const { rawValue, formattedValue, fileUrl, currencyCode, bgColor, isBold, isItalic } = req.body;
+        const { rawValue, formattedValue, fileUrl, currencyCode, bgColor, isBold, isItalic, nestedSheetId } = req.body;
 
         if (req.user.role === "staff") {
             const perm = await SheetPermission.findOne({ where: { userId: req.user.id, spreadsheetId } });
@@ -253,6 +254,7 @@ export const updateCell = async (req, res, next) => {
         if (isBold !== undefined) updateData.isBold = isBold;
         if (isItalic !== undefined) updateData.isItalic = isItalic;
         if (currencyCode !== undefined) updateData.currencyCode = currencyCode;
+        if (nestedSheetId !== undefined) updateData.nestedSheetId = nestedSheetId;
         updateData.updatedBy = req.user.id;
 
         await cell.update(updateData);
@@ -287,7 +289,7 @@ export const updateCell = async (req, res, next) => {
 // ── Upsert cell ───────────────────────────────────────────────────────────────
 export const upsertCell = async (req, res, next) => {
     try {
-        const { rowId, columnId, rawValue, fileUrl, formattedValue, currencyCode, bgColor, isBold, isItalic } = req.body;
+        const { rowId, columnId, rawValue, fileUrl, formattedValue, currencyCode, bgColor, isBold, isItalic, nestedSheetId } = req.body;
         const { id: spreadsheetId } = req.params;
 
         // Granular permission check for staff
@@ -341,6 +343,7 @@ export const upsertCell = async (req, res, next) => {
             if (isBold !== undefined) updateData.isBold = isBold;
             if (isItalic !== undefined) updateData.isItalic = isItalic;
             if (currencyCode !== undefined) updateData.currencyCode = currencyCode;
+            if (nestedSheetId !== undefined) updateData.nestedSheetId = nestedSheetId;
             updateData.updatedBy = req.user.id;
             await cell.update(updateData);
         } else {
@@ -352,6 +355,7 @@ export const upsertCell = async (req, res, next) => {
                 currencyCode, fileUrl, bgColor, 
                 isBold: isBold ?? false,
                 isItalic: isItalic ?? false,
+                nestedSheetId: nestedSheetId ?? null,
                 updatedBy: req.user.id
             });
         }
@@ -367,6 +371,7 @@ export const upsertCell = async (req, res, next) => {
                 columnId, rowId, rawValue,
                 formattedValue: cellResult.formattedValue,
                 computedValue: cellResult.computedValue,
+                nestedSheetId: cellResult.nestedSheetId,
                 updatedBy: req.user.id,
                 at: new Date().toISOString()
             });
