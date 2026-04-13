@@ -143,6 +143,7 @@ export const getSheetData = async (req, res, next) => {
             isBold: row.isBold,
             isItalic: row.isItalic,
             isLocked: row.isLocked,
+            nestedSheetId: row.nestedSheetId,
             cells: columns.map((col, ci) => {
                 const cell = cellIdx[`${row.id}_${col.id}`];
                 let fValue = cell?.formattedValue ?? null;
@@ -602,7 +603,7 @@ export const reorderRow = async (req, res, next) => {
 export const updateRowColor = async (req, res, next) => {
     try {
         const { id: spreadsheetId, rowId } = req.params;
-        const { rowColor, isBold, isItalic } = req.body;
+        const { rowColor, isBold, isItalic, nestedSheetId } = req.body;
 
         const row = await Row.findByPk(rowId);
         if (!row) throw new AppError("Row not found", 404);
@@ -610,6 +611,7 @@ export const updateRowColor = async (req, res, next) => {
         if (rowColor !== undefined) patchData.rowColor = rowColor || null;
         if (isBold !== undefined) patchData.isBold = isBold;
         if (isItalic !== undefined) patchData.isItalic = isItalic;
+        if (nestedSheetId !== undefined) patchData.nestedSheetId = nestedSheetId || null;
         
         await row.update(patchData);
 
