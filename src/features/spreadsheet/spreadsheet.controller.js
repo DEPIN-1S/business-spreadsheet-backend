@@ -720,7 +720,7 @@ export const listSheets = async (req, res, next) => {
         const { page, limit, offset } = getPagination(req);
         const { folderId, shared } = req.query;
 
-        let whereSpreadsheet = { isDeleted: false };
+        let whereSpreadsheet = { isDeleted: false, isDetailedView: false };
         if (folderId) whereSpreadsheet.folderId = folderId;
 
         if (shared === "true") {
@@ -874,20 +874,40 @@ export const setPermission = shareSheet;
 
 export const createSheet = async (req, res, next) => {
     try {
-        const { name, description, folderId, settings } = req.body;
+        const { name, description, folderId, settings, isDetailedView, columns: initialColumns } = req.body;
         if (folderId) {
             const folder = await Folder.findOne({ where: { id: folderId, isDeleted: false } });
             if (!folder) throw new AppError("Folder not found", 404);
         }
         let sheet;
         await sequelize.transaction(async (t) => {
-            sheet = await Spreadsheet.create({ name, description, folderId: folderId || null, settings, createdBy: req.user.id }, { transaction: t });
-            const defaultColumns = [
-                { spreadsheetId: sheet.id, name: "Column 1", type: "text", orderIndex: 0 },
-                { spreadsheetId: sheet.id, name: "Column 2", type: "text", orderIndex: 1 },
-                { spreadsheetId: sheet.id, name: "Column 3", type: "text", orderIndex: 2 },
-            ];
-            await Column.bulkCreate(defaultColumns, { transaction: t });
+            sheet = await Spreadsheet.create({ 
+                name, 
+                description, 
+                folderId: folderId || null, 
+                settings, 
+                isDetailedView: !!isDetailedView,
+                createdBy: req.user.id 
+            }, { transaction: t });
+            
+            let columnsToCreate = [];
+            if (initialColumns && Array.isArray(initialColumns) && initialColumns.length > 0) {
+                columnsToCreate = initialColumns.map((col, idx) => ({
+                    spreadsheetId: sheet.id,
+                    name: col.name,
+                    type: col.type || 'text',
+                    orderIndex: idx,
+                    width: col.width || 220
+                }));
+            } else {
+                columnsToCreate = [
+                    { spreadsheetId: sheet.id, name: "Column 1", type: "text", orderIndex: 0 },
+                    { spreadsheetId: sheet.id, name: "Column 2", type: "text", orderIndex: 1 },
+                    { spreadsheetId: sheet.id, name: "Column 3", type: "text", orderIndex: 2 },
+                ];
+            }
+            
+            await Column.bulkCreate(columnsToCreate, { transaction: t });
             const defaultRows = Array.from({ length: 10 }, (_, i) => ({ spreadsheetId: sheet.id, order: i }));
             await Row.bulkCreate(defaultRows, { transaction: t });
         });
@@ -941,6 +961,7 @@ export async function copySheetInternal(originalSheetId, targetFolderId, newName
         description: original.description,
         folderId: targetFolderId,
         settings: original.settings,
+        isDetailedView: original.isDetailedView,
         createdBy: userId
     }, { transaction });
 

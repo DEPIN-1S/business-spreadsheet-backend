@@ -8,6 +8,7 @@ const Spreadsheet = sequelize.define("Spreadsheet", {
     folderId: { type: DataTypes.UUID, allowNull: true, defaultValue: null },
     createdBy: { type: DataTypes.UUID, allowNull: false },
     settings: { type: DataTypes.JSON, defaultValue: {} },
+    isDetailedView: { type: DataTypes.BOOLEAN, defaultValue: false },
     isLocked: { type: DataTypes.BOOLEAN, defaultValue: false },
     isDeleted: { type: DataTypes.BOOLEAN, defaultValue: false }
 }, {

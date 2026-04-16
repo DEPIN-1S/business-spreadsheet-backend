@@ -14,7 +14,7 @@ const httpServer = http.createServer(app);
 initSocket(httpServer);
 
 sequelize
-  .sync() // no alter here
+  .sync() // revert to no alter
   .then(() => {
     logger.info("✅ Database synced");
     httpServer.listen(PORT, () => {

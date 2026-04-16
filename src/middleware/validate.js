@@ -34,7 +34,13 @@ export const schemas = {
         name: Joi.string().min(1).max(200).required(),
         description: Joi.string().allow("", null),
         folderId: Joi.string().uuid().allow(null),
-        settings: Joi.object().default({})
+        settings: Joi.object().default({}),
+        isDetailedView: Joi.boolean().default(false),
+        columns: Joi.array().items(Joi.object({
+            name: Joi.string().required(),
+            type: Joi.string().required(),
+            width: Joi.number().integer().min(20).optional()
+        })).optional()
     }),
 
     createColumn: Joi.object({
