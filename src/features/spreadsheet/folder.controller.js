@@ -34,7 +34,7 @@ async function buildTree(parentId, userId, role, allowedIds = null) {
         where.id = { [Op.in]: allowedIds };
     }
 
-    folders = await Folder.findAll({ where, order: [["name", "ASC"]] });
+    const folders = await Folder.findAll({ where, order: [["name", "ASC"]] });
 
     return Promise.all(folders.map(async (folder) => {
         const children = await buildTree(folder.id, userId, role, allowedIds);
