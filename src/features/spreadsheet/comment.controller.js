@@ -1,12 +1,15 @@
 import Comment from "./comment.model.js";
 import Cell from "./cell.model.js";
 import SheetPermission from "./permission.model.js";
+import FolderPermission from "./folder_permission.model.js";
+import Spreadsheet from "./spreadsheet.model.js";
 import ColumnPermission from "./column_permission.model.js";
 import User from "../user/user.model.js";
 import AppError from "../../utils/AppError.js";
 import { getIO } from "../../config/socket.js";
 import { logAction } from "../../utils/auditLogger.js";
 import sequelize from "../../config/db.js";
+import { getInheritedPermission } from "../../middleware/rbac.js";
 
 // ── Add Comment ───────────────────────────────────────────────────────────────
 export const addComment = async (req, res, next) => {
@@ -17,9 +20,19 @@ export const addComment = async (req, res, next) => {
 
         if (!text?.trim()) throw new AppError("Comment text is required", 400);
 
-        // Permission check for staff
+        // Permission check for staff (direct, owner, or inherited from folder)
         if (role === "staff") {
-            const perm = await SheetPermission.findOne({ where: { userId, spreadsheetId: sheetId } });
+            let perm = await SheetPermission.findOne({ where: { userId, spreadsheetId: sheetId } });
+            if (!perm) {
+                const sheet = await Spreadsheet.findOne({ where: { id: sheetId, isDeleted: false }, attributes: ["folderId", "createdBy"] });
+                if (sheet) {
+                    if (sheet.createdBy === userId) {
+                        perm = { canView: true, canEdit: true };
+                    } else if (sheet.folderId) {
+                        perm = await getInheritedPermission(userId, sheet.folderId);
+                    }
+                }
+            }
             if (!perm || !perm.canView) throw new AppError("No access to this sheet", 403);
         }
 
@@ -48,7 +61,17 @@ export const listComments = async (req, res, next) => {
         const { id: userId, role } = req.user;
 
         if (role === "staff") {
-            const perm = await SheetPermission.findOne({ where: { userId, spreadsheetId: sheetId } });
+            let perm = await SheetPermission.findOne({ where: { userId, spreadsheetId: sheetId } });
+            if (!perm) {
+                const sheet = await Spreadsheet.findOne({ where: { id: sheetId, isDeleted: false }, attributes: ["folderId", "createdBy"] });
+                if (sheet) {
+                    if (sheet.createdBy === userId) {
+                        perm = { canView: true, canEdit: true };
+                    } else if (sheet.folderId) {
+                        perm = await getInheritedPermission(userId, sheet.folderId);
+                    }
+                }
+            }
             if (!perm || !perm.canView) throw new AppError("No access to this sheet", 403);
         }
 
@@ -119,7 +142,17 @@ export const getCommentCounts = async (req, res, next) => {
         const { id: userId, role } = req.user;
 
         if (role === "staff") {
-            const perm = await SheetPermission.findOne({ where: { userId, spreadsheetId: sheetId } });
+            let perm = await SheetPermission.findOne({ where: { userId, spreadsheetId: sheetId } });
+            if (!perm) {
+                const sheet = await Spreadsheet.findOne({ where: { id: sheetId, isDeleted: false }, attributes: ["folderId", "createdBy"] });
+                if (sheet) {
+                    if (sheet.createdBy === userId) {
+                        perm = { canView: true, canEdit: true };
+                    } else if (sheet.folderId) {
+                        perm = await getInheritedPermission(userId, sheet.folderId);
+                    }
+                }
+            }
             if (!perm || !perm.canView) throw new AppError("No access to this sheet", 403);
         }
 

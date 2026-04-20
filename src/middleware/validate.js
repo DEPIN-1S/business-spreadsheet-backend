@@ -68,10 +68,11 @@ export const schemas = {
     }),
 
     shareSheet: Joi.object({
-        email: Joi.string().email().required(),
+        email: Joi.string().email().allow(null, ""),
+        phone: Joi.string().allow(null, ""),
         role: Joi.string().valid("viewer", "editor", "admin").default("viewer"),
         columnAccess: Joi.object().pattern(Joi.string(), Joi.string().valid('view', 'edit')).optional()
-    }),
+    }).or('email', 'phone'),
 
     updateShareRole: Joi.object({
         role: Joi.string().valid("viewer", "editor", "admin").required()

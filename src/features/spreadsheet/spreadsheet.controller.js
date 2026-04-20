@@ -4,6 +4,7 @@ import Row from "./row.model.js";
 import Cell from "./cell.model.js";
 import SheetPermission from "./permission.model.js";
 import ColumnPermission from "./column_permission.model.js";
+import FolderPermission from "./folder_permission.model.js";
 import Folder from "./folder.model.js";
 import { evaluate, resolveColumnNames } from "../../utils/formulaEngine.js";
 import { parseCurrencyInput, formatCurrencyValue } from "../../utils/currencyHelpers.js";
@@ -16,6 +17,7 @@ import { Op } from "sequelize";
 import logger from "../../config/logger.js";
 import User from "../user/user.model.js";
 import sequelize from "../../config/db.js";
+import { getInheritedPermission } from "../../middleware/rbac.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -74,6 +76,30 @@ export const getSheetData = async (req, res, next) => {
         // Column privacy and permission mapping
         let columnPermissionsMap = {}; // { colId: 'edit' | 'view' }
         if (role === "staff") {
+            // Check direct sheet permission
+            let sheetPerm = await SheetPermission.findOne({ where: { userId, spreadsheetId } });
+            
+            // Check if user is the owner (creator)
+            if (!sheetPerm && sheet.createdBy === userId) {
+                sheetPerm = {
+                    canView: true,
+                    canEdit: true,
+                    role: 'admin'
+                };
+            }
+
+            // Check inherited folder permission (recursively) if no direct/owner access
+            if (!sheetPerm && sheet.folderId) {
+                const folderPerm = await getInheritedPermission(userId, sheet.folderId);
+                if (folderPerm) {
+                    sheetPerm = {
+                        canView: true,
+                        canEdit: folderPerm.canEdit,
+                        role: folderPerm.canEdit ? "editor" : "viewer"
+                    };
+                }
+            }
+
             const colPerm = await ColumnPermission.findOne({ where: { userId, spreadsheetId } });
             if (colPerm && colPerm.columnAccess) {
                 columnPermissionsMap = typeof colPerm.columnAccess === 'string' 
@@ -81,8 +107,11 @@ export const getSheetData = async (req, res, next) => {
                     : colPerm.columnAccess;
                 // Filter columns to only those explicitly granted 'view' or 'edit'
                 columns = columns.filter(c => columnPermissionsMap[c.id]);
+            } else if (sheetPerm && sheetPerm.canView) {
+                // If user has sheet access (direct, owner, or inherited) but NO explicit ColumnPermission, allow access to all columns
+                columns.forEach(c => { columnPermissionsMap[c.id] = (sheetPerm.canEdit ? 'edit' : 'view'); });
             } else {
-                // If no ColumnPermission record, staff can see nothing (secure by default)
+                // Secure by default: no columns if no permission found
                 columns = [];
             }
         } else {
@@ -760,13 +789,16 @@ export const listSheets = async (req, res, next) => {
 export const shareSheet = async (req, res, next) => {
     try {
         const { id: spreadsheetId } = req.params;
-        const { phone, role = "viewer", columnAccess } = req.body;
-        logger.info(`[DEBUG] shareSheet: sheetId=${spreadsheetId}, phone=${phone}, role=${role}, hasColumnAccess=${columnAccess !== undefined}`);
+        const { phone, email, role = "viewer", columnAccess } = req.body;
+        logger.info(`[DEBUG] shareSheet: sheetId=${spreadsheetId}, phone=${phone}, email=${email}, role=${role}, hasColumnAccess=${columnAccess !== undefined}`);
 
         const sheet = await Spreadsheet.findOne({ where: { id: spreadsheetId, isDeleted: false } });
         if (!sheet) throw new AppError("Spreadsheet not found", 404);
 
-        const user = await User.findOne({ where: { phone } });
+        const user = phone 
+            ? await User.findOne({ where: { phone } })
+            : await User.findOne({ where: { email } });
+
         if (!user) throw new AppError("User not found", 404);
 
         const canView = true;

@@ -37,7 +37,8 @@ export function initSocket(httpServer) {
         cors: {
             origin: allowedOrigins,
             methods: ["GET", "POST"]
-        }
+        },
+        transports: ["websocket", "polling"]
     });
 
     // ── JWT middleware ──────────────────────────────────────────────────────────

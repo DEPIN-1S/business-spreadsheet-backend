@@ -26,21 +26,18 @@ async function wouldCreateCycle(folderId, newParentId) {
 }
 
 // ── Helper: build nested folder tree recursively ─────────────────────────────
-async function buildTree(parentId, userId, role) {
+async function buildTree(parentId, userId, role, allowedIds = null) {
     const where = { parentId: parentId || null, isDeleted: false };
 
-    let folders;
     if (role === "staff") {
-        // Staff can only see folders they have FolderPermission for
-        const perms = await FolderPermission.findAll({ where: { userId, canView: true }, attributes: ["folderId"] });
-        const allowedIds = perms.map(p => p.folderId);
+        if (!allowedIds || allowedIds.length === 0) return [];
         where.id = { [Op.in]: allowedIds };
     }
 
     folders = await Folder.findAll({ where, order: [["name", "ASC"]] });
 
     return Promise.all(folders.map(async (folder) => {
-        const children = await buildTree(folder.id, userId, role);
+        const children = await buildTree(folder.id, userId, role, allowedIds);
         const sheets = await Spreadsheet.findAll({
             where: { folderId: folder.id, isDeleted: false },
             attributes: ["id", "name", "createdAt"]
@@ -125,7 +122,13 @@ export const deleteFolder = async (req, res, next) => {
 export const getFolderTree = async (req, res, next) => {
     try {
         const { role, id: userId } = req.user;
-        const tree = await buildTree(null, userId, role);
+        let allowedIds = null;
+        if (role === "staff") {
+            const perms = await FolderPermission.findAll({ where: { userId, canView: true }, attributes: ["folderId"] });
+            allowedIds = perms.map(p => p.folderId);
+            if (allowedIds.length === 0) return res.json({ data: [] });
+        }
+        const tree = await buildTree(null, userId, role, allowedIds);
         res.json({ data: tree });
     } catch (e) { next(e); }
 };
@@ -137,7 +140,14 @@ export const getFolderChildren = async (req, res, next) => {
         const folder = await Folder.findOne({ where: { id: req.params.id, isDeleted: false } });
         if (!folder) throw new AppError("Folder not found", 404);
 
-        const tree = await buildTree(folder.id, userId, role);
+        let allowedIds = null;
+        if (role === "staff") {
+            const perms = await FolderPermission.findAll({ where: { userId, canView: true }, attributes: ["folderId"] });
+            allowedIds = perms.map(p => p.folderId);
+            if (!allowedIds.includes(folder.id)) throw new AppError("Access denied", 403);
+        }
+
+        const tree = await buildTree(folder.id, userId, role, allowedIds);
         res.json({ data: { folder, children: tree } });
     } catch (e) { next(e); }
 };

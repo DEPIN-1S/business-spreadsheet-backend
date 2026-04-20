@@ -1,6 +1,26 @@
 import SheetPermission from "../features/spreadsheet/permission.model.js";
+import FolderPermission from "../features/spreadsheet/folder_permission.model.js";
+import Spreadsheet from "../features/spreadsheet/spreadsheet.model.js";
+import Folder from "../features/spreadsheet/folder.model.js";
 import AppError from "../utils/AppError.js";
 import logger from "../config/logger.js";
+
+/**
+ * Recursive check for folder permissions.
+ * Walks up the folder tree to find if the user has permission on any parent.
+ */
+export async function getInheritedPermission(userId, folderId) {
+    let currentFolderId = folderId;
+    while (currentFolderId) {
+        const folderPerm = await FolderPermission.findOne({ where: { userId, folderId: currentFolderId, canView: true } });
+        if (folderPerm) return folderPerm;
+        
+        const folder = await Folder.findOne({ where: { id: currentFolderId, isDeleted: false }, attributes: ["parentId"] });
+        if (!folder || !folder.parentId) break;
+        currentFolderId = folder.parentId;
+    }
+    return null;
+}
 
 /**
  * Check that the logged-in user has the required permission on a spreadsheet.
@@ -17,15 +37,53 @@ export const checkSheetPermission = (action = "view") => async (req, res, next) 
         const sheetId = req.params.id || req.params.sheetId;
         if (!sheetId) throw new AppError("Sheet ID missing", 400);
 
-        logger.info(`[DEBUG] checkSheetPermission START: action=${action}, userId=${userId}, sheetId=${sheetId}`);
-        const perm = await SheetPermission.findOne({ where: { userId, spreadsheetId: sheetId } });
+        let perm = await SheetPermission.findOne({ where: { userId, spreadsheetId: sheetId } });
         
-        if (!perm) {
-            const allUserPerms = await SheetPermission.findAll({ where: { userId } });
-            logger.warn(`[DEBUG] No permission found for userId=${userId}, sheetId=${sheetId}. User has ${allUserPerms.length} total perms.`);
-            if (allUserPerms.length > 0) {
-                logger.warn(`[DEBUG] First available spreadsheetId for user: ${allUserPerms[0].spreadsheetId}`);
+        if (perm) {
+            logger.info(`[DEBUG] Found direct SheetPermission for userId=${userId}, sheetId=${sheetId}`);
+        } else if (role === "staff") {
+            logger.info(`[DEBUG] No direct SheetPermission, checking owner/inheritance for staff user=${userId}, sheetId=${sheetId}`);
+            
+            // Fetch sheet to check owner (createdBy) and folderId
+            const sheet = await Spreadsheet.findOne({ where: { id: sheetId, isDeleted: false }, attributes: ["id", "folderId", "createdBy"] });
+            
+            if (sheet) {
+                // 1. Owner Check
+                if (sheet.createdBy === userId) {
+                    perm = {
+                        userId,
+                        spreadsheetId: sheetId,
+                        canView: true,
+                        canEdit: true,
+                        canEditFormulas: true,
+                        role: "admin",
+                        isOwner: true
+                    };
+                    logger.info(`[DEBUG] User is owner of sheet=${sheetId}`);
+                } 
+                // 2. Inheritance Check
+                else if (sheet.folderId) {
+                    const folderPerm = await getInheritedPermission(userId, sheet.folderId);
+                    if (folderPerm) {
+                        perm = {
+                            userId,
+                            spreadsheetId: sheetId,
+                            canView: true,
+                            canEdit: folderPerm.canEdit,
+                            canEditFormulas: false,
+                            role: folderPerm.canEdit ? "editor" : "viewer",
+                            isInherited: true
+                        };
+                        logger.info(`[DEBUG] Inherited recursive permission from folder=${folderPerm.folderId}`);
+                    }
+                }
+            } else {
+                logger.error(`[DEBUG] Spreadsheet not found for sheetId=${sheetId}`);
             }
+        }
+
+        if (!perm) {
+            logger.error(`[DEBUG] PERMISSION DENIED: userId=${userId}, sheetId=${sheetId}, role=${role}`);
             throw new AppError("No permission for this spreadsheet", 403);
         }
 
@@ -51,9 +109,39 @@ export const attachSheetPermission = async (req, res, next) => {
             return next();
         }
         const sheetId = req.params.id || req.params.sheetId;
-        req.sheetPermission = sheetId
-            ? await SheetPermission.findOne({ where: { userId, spreadsheetId: sheetId } })
-            : null;
+        if (!sheetId) return next();
+
+        let perm = await SheetPermission.findOne({ where: { userId, spreadsheetId: sheetId } });
+        if (!perm) {
+            const sheet = await Spreadsheet.findOne({ where: { id: sheetId, isDeleted: false }, attributes: ["folderId", "createdBy"] });
+            if (sheet) {
+                if (sheet.createdBy === userId) {
+                    perm = {
+                        userId,
+                        spreadsheetId: sheetId,
+                        canView: true,
+                        canEdit: true,
+                        canEditFormulas: true,
+                        role: "admin",
+                        isOwner: true
+                    };
+                } else if (sheet.folderId) {
+                    const folderPerm = await getInheritedPermission(userId, sheet.folderId);
+                    if (folderPerm) {
+                        perm = {
+                            userId,
+                            spreadsheetId: sheetId,
+                            canView: true,
+                            canEdit: folderPerm.canEdit,
+                            canEditFormulas: false,
+                            role: folderPerm.canEdit ? "editor" : "viewer",
+                            isInherited: true
+                        };
+                    }
+                }
+            }
+        }
+        req.sheetPermission = perm;
         next();
     } catch (err) { next(err); }
 };
