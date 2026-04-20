@@ -132,7 +132,7 @@ export const verifyLoginOtp = async (req, res, next) => {
     if (!user) throw new AppError("User not found or inactive", 404);
 
     if (process.env.NODE_ENV !== "production" && phone === "9999999999" && otp === "1234") {
-      // Bypass MSG91 for test admin in non-production environments
+      // Bypass MSG91 for test admin in non-production environments 
     } else {
       // Local OTP Verification
       if (!user.loginOtp || user.loginOtp !== otp) {

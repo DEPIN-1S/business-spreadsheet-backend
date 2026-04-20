@@ -5,6 +5,7 @@ import sequelize from "../../config/db.js";
  * RefreshToken model
  * Stores long-lived refresh tokens for JWT token rotation.
  * One user can have multiple active tokens (multi-device support).
+ * 
  */
 const RefreshToken = sequelize.define("RefreshToken", {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
