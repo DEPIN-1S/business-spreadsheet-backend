@@ -8,7 +8,7 @@ import {
     toggleColumnHidden, toggleColumnLocked,
     shareSheet, updateShareRole, removeShare, getSharedWithMe, setPermission, listPermissions,
     createSheet, getSheet, deleteSheet, duplicateSheet,
-    exportSheet, importSheet, copyRow
+    exportSheet, importSheet, copyRow, updateSheetSort
 } from "./spreadsheet.controller.js";
 import { protect } from "../../middleware/auth.js";
 import { checkSheetPermission } from "../../middleware/rbac.js";
@@ -32,6 +32,9 @@ router.post("/:id/duplicate", checkSheetPermission("view"), duplicateSheet);
 
 // Grid data
 router.get("/:id/data", checkSheetPermission("view"), getSheetData);
+
+// Sort (accessible to any user with at least edit access; shared across all viewers)
+router.patch("/:id/sort", checkSheetPermission("edit"), updateSheetSort);
 
 // Cell operations
 router.put("/:id/cells/:cellId", checkSheetPermission("edit"), validate(schemas.updateCell), updateCell);

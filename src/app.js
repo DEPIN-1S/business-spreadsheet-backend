@@ -36,11 +36,12 @@ app.use(cors({
         if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
             callback(null, true);
         } else {
+            console.error(`Blocked by CORS: origin='${origin}'`);
             callback(new Error('Not allowed by CORS'));
         }
     },
     credentials: true
-}));
+})); // force restart
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
 app.use(rateLimit({

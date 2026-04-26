@@ -18,7 +18,7 @@ router.get("/:id/breadcrumb", getBreadcrumb);
 router.post("/", createFolder);
 router.post("/:id/duplicate", duplicateFolder);
 router.put("/:id", updateFolder);
-router.delete("/:id", protect(["admin", "superadmin"]), deleteFolder);
+router.delete("/:id", deleteFolder);
 
 // Permission management (admin+)
 router.post("/:id/permissions", protect(["admin", "superadmin"]), setFolderPermission);

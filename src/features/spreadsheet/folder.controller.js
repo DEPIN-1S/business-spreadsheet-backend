@@ -30,8 +30,10 @@ async function buildTree(parentId, userId, role, allowedIds = null) {
     const where = { parentId: parentId || null, isDeleted: false };
 
     if (role === "staff") {
-        if (!allowedIds || allowedIds.length === 0) return [];
-        where.id = { [Op.in]: allowedIds };
+        where[Op.or] = [
+            { id: { [Op.in]: allowedIds || [] } },
+            { createdBy: userId }
+        ];
     }
 
     const folders = await Folder.findAll({ where, order: [["name", "ASC"]] });
@@ -57,6 +59,11 @@ export const createFolder = async (req, res, next) => {
             if (!parent) throw new AppError("Parent folder not found", 404);
         }
 
+        const existing = await Folder.findOne({ 
+            where: { name: name.trim(), parentId: parentId || null, isDeleted: false } 
+        });
+        if (existing) throw new AppError("A folder with this name already exists in this location", 400);
+
         const folder = await Folder.create({ name: name.trim(), parentId: parentId || null, createdBy: req.user.id });
         await logAction(req.user.id, "folder", folder.id, "create", null, { name, parentId }, req);
 
@@ -67,14 +74,31 @@ export const createFolder = async (req, res, next) => {
 // ── Rename or Move Folder ─────────────────────────────────────────────────────
 export const updateFolder = async (req, res, next) => {
     try {
+        const { role, id: userId } = req.user;
         const { name, parentId } = req.body;
         const folder = await Folder.findOne({ where: { id: req.params.id, isDeleted: false } });
         if (!folder) throw new AppError("Folder not found", 404);
+
+        // Permission check for staff
+        if (role === "staff" && folder.createdBy !== userId) {
+            const perms = await FolderPermission.findOne({ where: { userId, folderId: folder.id, canEdit: true } });
+            if (!perms) throw new AppError("Access denied", 403);
+        }
 
         // Circular reference check when moving
         if (parentId !== undefined && parentId !== folder.parentId) {
             const cycle = await wouldCreateCycle(folder.id, parentId);
             if (cycle) throw new AppError("Cannot move folder: would create a circular reference", 422);
+        }
+
+        const checkName = name !== undefined ? name.trim() : folder.name;
+        const checkParentId = parentId !== undefined ? (parentId || null) : folder.parentId;
+
+        if (name !== undefined || parentId !== undefined) {
+            const existing = await Folder.findOne({
+                where: { name: checkName, parentId: checkParentId, isDeleted: false, id: { [Op.ne]: folder.id } }
+            });
+            if (existing) throw new AppError("A folder with this name already exists in the target location", 400);
         }
 
         const old = { name: folder.name, parentId: folder.parentId };
@@ -92,8 +116,16 @@ export const updateFolder = async (req, res, next) => {
 // ── Soft Delete Folder (cascades to children + sheets) ───────────────────────
 export const deleteFolder = async (req, res, next) => {
     try {
+        const { role, id: userId } = req.user;
         const folder = await Folder.findOne({ where: { id: req.params.id, isDeleted: false } });
         if (!folder) throw new AppError("Folder not found", 404);
+
+        // Permission check for staff
+        if (role === "staff" && folder.createdBy !== userId) {
+            // Even if they have edit permission, usually only owner/admin can delete. 
+            // But if we want to follow the "superadmin" behavior, we allow owner to delete.
+            throw new AppError("Only the creator or an admin can delete this folder", 403);
+        }
 
         // Collect all descendant folder IDs
         const allIds = [folder.id];
@@ -126,7 +158,6 @@ export const getFolderTree = async (req, res, next) => {
         if (role === "staff") {
             const perms = await FolderPermission.findAll({ where: { userId, canView: true }, attributes: ["folderId"] });
             allowedIds = perms.map(p => p.folderId);
-            if (allowedIds.length === 0) return res.json({ data: [] });
         }
         const tree = await buildTree(null, userId, role, allowedIds);
         res.json({ data: tree });
@@ -144,7 +175,9 @@ export const getFolderChildren = async (req, res, next) => {
         if (role === "staff") {
             const perms = await FolderPermission.findAll({ where: { userId, canView: true }, attributes: ["folderId"] });
             allowedIds = perms.map(p => p.folderId);
-            if (!allowedIds.includes(folder.id)) throw new AppError("Access denied", 403);
+            if (!allowedIds.includes(folder.id) && folder.createdBy !== userId) {
+                throw new AppError("Access denied", 403);
+            }
         }
 
         const tree = await buildTree(folder.id, userId, role, allowedIds);
@@ -196,9 +229,17 @@ async function copyFolderInternal(originalFolderId, newParentId, newName, userId
     const original = await Folder.findOne({ where: { id: originalFolderId, isDeleted: false }, transaction });
     if (!original) throw new AppError(`Folder ${originalFolderId} not found`, 404);
 
+    const folderName = newName || original.name;
+    const existing = await Folder.findOne({
+        where: { name: folderName, parentId: newParentId || null, isDeleted: false },
+        transaction
+    });
+    if (existing) throw new AppError(`A folder named '${folderName}' already exists in this location`, 400);
+
     const folder = await Folder.create({
-        name: newName || original.name,
+        name: folderName,
         parentId: newParentId,
+
         createdBy: userId
     }, { transaction });
 
@@ -224,6 +265,12 @@ export const duplicateFolder = async (req, res, next) => {
 
         const original = await Folder.findOne({ where: { id, isDeleted: false } });
         if (!original) throw new AppError("Folder not found", 404);
+
+        // Permission check for staff
+        if (req.user.role === "staff" && original.createdBy !== req.user.id) {
+            const perms = await FolderPermission.findOne({ where: { userId: req.user.id, folderId: id, canView: true } });
+            if (!perms) throw new AppError("Access denied", 403);
+        }
 
         let newFolder;
         await sequelize.transaction(async (t) => {

@@ -224,10 +224,7 @@ export const updateCell = async (req, res, next) => {
         const { id: spreadsheetId, cellId } = req.params;
         const { rawValue, formattedValue, fileUrl, currencyCode, bgColor, isBold, isItalic, nestedSheetId } = req.body;
 
-        if (req.user.role === "staff") {
-            const perm = await SheetPermission.findOne({ where: { userId: req.user.id, spreadsheetId } });
-            if (!perm || !perm.canEdit) throw new AppError("Edit access denied", 403);
-        }
+
 
         let cell = await Cell.findByPk(cellId);
         if (!cell) throw new AppError("Cell not found", 404);
@@ -237,12 +234,16 @@ export const updateCell = async (req, res, next) => {
         const col = await Column.findByPk(columnId);
         
         // Granular permission check for staff
-        if (req.user.role === "staff") {
+        if (req.user.role === "staff" && !req.sheetPermission?.isOwner && req.sheetPermission?.role !== "admin") {
             const colPerm = await ColumnPermission.findOne({ where: { userId: req.user.id, spreadsheetId } });
-            if (!colPerm) throw new AppError("You do not have permission to edit this column", 403);
             
-            const access = typeof colPerm.columnAccess === 'string' ? JSON.parse(colPerm.columnAccess) : (colPerm.columnAccess || {});
-            if (access[columnId] !== 'edit') {
+            // If colPerm exists, enforce granular access. If not, fallback to sheet-level canEdit
+            if (colPerm) {
+                const access = typeof colPerm.columnAccess === 'string' ? JSON.parse(colPerm.columnAccess) : (colPerm.columnAccess || {});
+                if (access[columnId] !== 'edit') {
+                    throw new AppError("You do not have permission to edit this column", 403);
+                }
+            } else if (!req.sheetPermission?.canEdit) {
                 throw new AppError("You do not have permission to edit this column", 403);
             }
         }
@@ -322,12 +323,16 @@ export const upsertCell = async (req, res, next) => {
         const { id: spreadsheetId } = req.params;
 
         // Granular permission check for staff
-        if (req.user.role === "staff") {
+        if (req.user.role === "staff" && !req.sheetPermission?.isOwner && req.sheetPermission?.role !== "admin") {
             const colPerm = await ColumnPermission.findOne({ where: { userId: req.user.id, spreadsheetId } });
-            if (!colPerm) throw new AppError("You do not have permission to edit this column", 403);
             
-            const access = typeof colPerm.columnAccess === 'string' ? JSON.parse(colPerm.columnAccess) : (colPerm.columnAccess || {});
-            if (access[columnId] !== 'edit') {
+            // If colPerm exists, enforce granular access. If not, fallback to sheet-level canEdit
+            if (colPerm) {
+                const access = typeof colPerm.columnAccess === 'string' ? JSON.parse(colPerm.columnAccess) : (colPerm.columnAccess || {});
+                if (access[columnId] !== 'edit') {
+                    throw new AppError("You do not have permission to edit this column", 403);
+                }
+            } else if (!req.sheetPermission?.canEdit) {
                 throw new AppError("You do not have permission to edit this column", 403);
             }
         }
@@ -911,6 +916,14 @@ export const createSheet = async (req, res, next) => {
             const folder = await Folder.findOne({ where: { id: folderId, isDeleted: false } });
             if (!folder) throw new AppError("Folder not found", 404);
         }
+
+        if (!name?.trim()) throw new AppError("Spreadsheet name is required", 400);
+
+        const existing = await Spreadsheet.findOne({
+            where: { name: name.trim(), folderId: folderId || null, isDeleted: false }
+        });
+        if (existing) throw new AppError("A spreadsheet with this name already exists in this location", 400);
+
         let sheet;
         await sequelize.transaction(async (t) => {
             sheet = await Spreadsheet.create({ 
@@ -961,13 +974,159 @@ export const updateSheet = async (req, res, next) => {
     try {
         const sheet = await Spreadsheet.findOne({ where: { id: req.params.id, isDeleted: false } });
         if (!sheet) throw new AppError("Spreadsheet not found", 404);
+
+        const { name, folderId } = req.body;
+        const checkName = name !== undefined ? name.trim() : sheet.name;
+        const checkFolderId = folderId !== undefined ? (folderId || null) : sheet.folderId;
+
+        if (name !== undefined || folderId !== undefined) {
+            const existing = await Spreadsheet.findOne({
+                where: { name: checkName, folderId: checkFolderId, isDeleted: false, id: { [Op.ne]: sheet.id } }
+            });
+            if (existing) throw new AppError("A spreadsheet with this name already exists in the target location", 400);
+        }
+
         const old = { name: sheet.name, description: sheet.description, folderId: sheet.folderId };
         await sheet.update(req.body);
         await logAction(req.user.id, "sheet", sheet.id, "update", old, req.body, req, { spreadsheetId: sheet.id });
         const io = getIO();
-        if (io) io.to(`sheet:${sheet.id}`).emit("column_updated", { action: "sheet_updated", sheetId: sheet.id });
+        if (io) {
+            if (req.body.settings?.sortConfig !== undefined) {
+                // Broadcast sort change instantly to all viewers
+                io.to(`sheet:${sheet.id}`).emit("sort_applied", {
+                    sheetId: sheet.id,
+                    sortConfig: req.body.settings.sortConfig,
+                    appliedBy: req.user.id
+                });
+            } else {
+                io.to(`sheet:${sheet.id}`).emit("column_updated", { action: "sheet_updated", sheetId: sheet.id });
+            }
+        }
         res.json({ data: sheet, message: "Spreadsheet updated" });
     } catch (e) { next(e); }
+};
+
+// ── Update Sheet Sort Config ──────────────────────────────────────────────────
+// Dedicated endpoint so any editor can persist sort for all viewers
+export const updateSheetSort = async (req, res, next) => {
+    try {
+        const { id: sheetId } = req.params;
+        const { sortConfig } = req.body; // { colId, direction } or { colId: null }
+
+        const sheet = await Spreadsheet.findOne({ where: { id: sheetId, isDeleted: false } });
+        if (!sheet) throw new AppError("Spreadsheet not found", 404);
+
+        // 1. Robustly merge sortConfig into existing settings
+        let currentSettings = sheet.settings;
+        if (typeof currentSettings === 'string') {
+            try { currentSettings = JSON.parse(currentSettings); } catch (e) { currentSettings = {}; }
+        }
+        if (!currentSettings || typeof currentSettings !== 'object') currentSettings = {};
+
+        const newSettings = { ...currentSettings, sortConfig: sortConfig || { colId: null, direction: 'asc' } };
+
+        // Use static UPDATE to bypass Sequelize JSON field change-detection issues
+        await Spreadsheet.update(
+            { settings: newSettings },
+            { where: { id: sheetId } }
+        );
+
+        logger.info(`[SORT] Settings updated for sheet=${sheetId}. Now applying physical reorder if needed...`);
+
+        // 2. If a column is specified, physically reorder rows in the DB for true permanence
+        if (sortConfig && sortConfig.colId) {
+            const col = await Column.findOne({ where: { id: sortConfig.colId, isDeleted: false } });
+            if (col) {
+                // Fetch ALL rows and their cells for this specific column
+                const rows = await Row.findAll({
+                    where: { spreadsheetId: sheetId, isDeleted: false },
+                    include: [{
+                        model: Cell,
+                        as: 'cells',
+                        where: { columnId: sortConfig.colId },
+                        required: false
+                    }]
+                });
+
+                logger.info(`[SORT] Reordering ${rows.length} rows physically based on column "${col.name}" (${col.type})`);
+
+                // Sort logic matching the frontend exactly
+                rows.sort((a, b) => {
+                    const cellA = (a.cells && a.cells.length > 0) ? a.cells[0] : null;
+                    const cellB = (b.cells && b.cells.length > 0) ? b.cells[0] : null;
+                    
+                    const rawA = cellA?.computedValue ?? cellA?.rawValue ?? '';
+                    const rawB = cellB?.computedValue ?? cellB?.rawValue ?? '';
+
+                    const emptyA = rawA === '' || rawA === null || rawA === undefined;
+                    const emptyB = rawB === '' || rawB === null || rawB === undefined;
+                    
+                    if (emptyA && emptyB) return 0;
+                    if (emptyA) return 1;
+                    if (emptyB) return -1;
+
+                    const dir = sortConfig.direction === 'asc' ? 1 : -1;
+
+                    if (col.type === 'number' || col.type === 'formula') {
+                        const numA = parseFloat(rawA);
+                        const numB = parseFloat(rawB);
+                        if (isNaN(numA) && isNaN(numB)) return 0;
+                        if (isNaN(numA)) return 1;
+                        if (isNaN(numB)) return -1;
+                        return (numA - numB) * dir;
+                    }
+                    if (col.type === 'currency') {
+                        const numA = parseFloat(String(rawA).replace(/[^0-9.-]/g, ''));
+                        const numB = parseFloat(String(rawB).replace(/[^0-9.-]/g, ''));
+                        if (isNaN(numA) && isNaN(numB)) return 0;
+                        if (isNaN(numA)) return 1;
+                        if (isNaN(numB)) return -1;
+                        return (numA - numB) * dir;
+                    }
+                    if (col.type === 'date') {
+                        const dateA = new Date(rawA);
+                        const dateB = new Date(rawB);
+                        if (isNaN(dateA) && isNaN(dateB)) return 0;
+                        if (isNaN(dateA)) return 1;
+                        if (isNaN(dateB)) return -1;
+                        return (dateA - dateB) * dir;
+                    }
+                    // Default: Text
+                    return String(rawA).localeCompare(String(rawB)) * dir;
+                });
+
+                // Update 'order' field for all rows in a transaction
+                await sequelize.transaction(async (t) => {
+                    for (let i = 0; i < rows.length; i++) {
+                        await Row.update({ order: i }, { where: { id: rows[i].id }, transaction: t });
+                    }
+                });
+                
+                logger.info(`[SORT] Physical reorder complete for sheet=${sheetId}. Recalculating formulas...`);
+                await recalculateFormulas(sheetId);
+                
+                logger.info(`[SORT] Formula recalculation complete for sheet=${sheetId}`);
+            }
+        }
+
+        // 3. Broadcast to all viewers in real-time
+        const io = getIO();
+        if (io) {
+            io.to(`sheet:${sheetId}`).emit("sort_applied", {
+                sheetId,
+                sortConfig: newSettings.sortConfig,
+                appliedBy: req.user.id,
+                isPermanent: true // Indicate that rows were physically reordered
+            });
+            // Also notify that rows changed order (useful if frontend wants to full refresh)
+            io.to(`sheet:${sheetId}`).emit("row_updated", { action: "reordered_all", sheetId });
+        }
+
+        res.json({ data: newSettings.sortConfig, message: "Sort applied permanently" });
+    } catch (e) { 
+        logger.error(`[SORT] Error in updateSheetSort: ${e.message}`);
+        next(e); 
+    }
 };
 
 export const deleteSheet = async (req, res, next) => {
@@ -988,8 +1147,15 @@ export async function copySheetInternal(originalSheetId, targetFolderId, newName
     const original = await Spreadsheet.findOne({ where: { id: originalSheetId, isDeleted: false }, transaction });
     if (!original) throw new AppError("Spreadsheet not found", 404);
 
+    const sheetName = newName || `${original.name} (Copy)`;
+    const existing = await Spreadsheet.findOne({
+        where: { name: sheetName, folderId: targetFolderId || null, isDeleted: false },
+        transaction
+    });
+    if (existing) throw new AppError(`A spreadsheet named '${sheetName}' already exists in this location`, 400);
+
     const newSheet = await Spreadsheet.create({
-        name: newName || `${original.name} (Copy)`,
+        name: sheetName,
         description: original.description,
         folderId: targetFolderId,
         settings: original.settings,
