@@ -919,15 +919,25 @@ export const createSheet = async (req, res, next) => {
 
         if (!name?.trim()) throw new AppError("Spreadsheet name is required", 400);
 
-        const existing = await Spreadsheet.findOne({
-            where: { name: name.trim(), folderId: folderId || null, isDeleted: false }
+        let finalName = name.trim();
+        let existing = await Spreadsheet.findOne({
+            where: { name: finalName, folderId: folderId || null, isDeleted: false }
         });
+
+        // Auto-resolve duplicate names for nested/detailed view sheets
+        if (existing && isDetailedView) {
+            finalName = `${finalName}-${Date.now().toString().slice(-6)}`;
+            existing = await Spreadsheet.findOne({
+                where: { name: finalName, folderId: folderId || null, isDeleted: false }
+            });
+        }
+
         if (existing) throw new AppError("A spreadsheet with this name already exists in this location", 400);
 
         let sheet;
         await sequelize.transaction(async (t) => {
             sheet = await Spreadsheet.create({ 
-                name, 
+                name: finalName, 
                 description, 
                 folderId: folderId || null, 
                 settings, 
