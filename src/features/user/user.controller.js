@@ -72,8 +72,13 @@ export const sendLoginOtp = async (req, res, next) => {
     const user = await User.findOne({ where: { phone, isActive: true } });
     if (!user) throw new AppError("User not found or inactive", 404);
 
-    if (process.env.NODE_ENV !== "production" && phone === "9999999999") {
-      // Bypass MSG91 for test admin in non-production environments
+    if (process.env.NODE_ENV !== "production") {
+      // Bypass MSG91 for all users in non-production environments
+      const generatedOtp = "1234";
+      await user.update({
+        loginOtp: generatedOtp,
+        loginOtpExpiry: new Date(Date.now() + 10 * 60 * 1000)
+      });
     } else {
       // Call MSG91 API to send OTP
       const TEMPLATE_ID = process.env.MSG91_TEMPLATE_ID;
@@ -131,8 +136,8 @@ export const verifyLoginOtp = async (req, res, next) => {
     const user = await User.findOne({ where: { phone, isActive: true } });
     if (!user) throw new AppError("User not found or inactive", 404);
 
-    if (process.env.NODE_ENV !== "production" && phone === "9999999999" && otp === "1234") {
-      // Bypass MSG91 for test admin in non-production environments 
+    if (process.env.NODE_ENV !== "production" && otp === "1234") {
+      // Bypass MSG91 for all users in non-production environments 
     } else {
       // Local OTP Verification
       if (!user.loginOtp || user.loginOtp !== otp) {
