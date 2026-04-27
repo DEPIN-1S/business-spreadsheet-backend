@@ -743,6 +743,14 @@ export const bulkInsertRows = async (req, res, next) => {
         });
 
         await recalculateFormulas(spreadsheetId);
+
+        const io = getIO();
+        if (io) {
+            createdRows.forEach(row => {
+                io.to(`sheet:${spreadsheetId}`).emit("row_updated", { action: "added", sheetId: spreadsheetId, row: row.toJSON() });
+            });
+        }
+
         res.status(201).json({ data: createdRows, message: `${createdRows.length} rows inserted` });
     } catch (e) { next(e); }
 };
