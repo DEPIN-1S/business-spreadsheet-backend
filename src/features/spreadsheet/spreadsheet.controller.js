@@ -772,8 +772,55 @@ export const listSheets = async (req, res, next) => {
             whereSpreadsheet.id = sharedIds;
             whereSpreadsheet.createdBy = { [Op.ne]: userId }; // Exclude owned
         } else if (role !== "superadmin" && role !== "admin") {
-            // For normal users, "My Files" means owned by them
-            whereSpreadsheet.createdBy = userId;
+            // For staff users, include:
+            // 1. Sheets they created
+            // 2. Sheets shared with them directly
+            // 3. Sheets in folders shared with them
+            const { getInheritedPermission } = await import("../../middleware/rbac.js");
+            
+            // Get all sheet IDs shared directly
+            const directPerms = await SheetPermission.findAll({ where: { userId }, attributes: ["spreadsheetId"] });
+            const directIds = directPerms.map(p => p.spreadsheetId);
+
+            // This is complex to do in one query with Sequelize if we want inheritance.
+            // For now, let's allow fetching more and we'll filter or use a subquery if needed.
+            // But a simpler way: if folderId is provided, check if user has access to that folder.
+            if (folderId) {
+                const folderPerm = await getInheritedPermission(userId, folderId);
+                const folder = await Folder.findByPk(folderId);
+                const isOwner = folder && folder.createdBy === userId;
+                
+                if (isOwner || folderPerm) {
+                    whereSpreadsheet.folderId = folderId;
+                    delete whereSpreadsheet.createdBy;
+                } else {
+                    whereSpreadsheet.createdBy = userId;
+                }
+            } else {
+                // If NO folderId, we need to return ALL accessible sheets so the frontend can flatten/render the tree correctly
+                const perms = await FolderPermission.findAll({ where: { userId, canView: true }, attributes: ["folderId"] });
+                const allowedFolderIds = perms.map(p => p.folderId);
+                
+                // Recursively find all children folders of these allowed folders
+                // This is still a bit expensive, but necessary for the current frontend architecture
+                const allAccessibleFolderIds = [...allowedFolderIds];
+                const findChildren = async (ids) => {
+                    const children = await Folder.findAll({ where: { parentId: ids, isDeleted: false }, attributes: ["id"] });
+                    if (children.length > 0) {
+                        const childIds = children.map(c => c.id);
+                        allAccessibleFolderIds.push(...childIds);
+                        await findChildren(childIds);
+                    }
+                };
+                if (allowedFolderIds.length > 0) await findChildren(allowedFolderIds);
+
+                whereSpreadsheet[Op.or] = [
+                    { createdBy: userId },
+                    { id: { [Op.in]: directIds } },
+                    { folderId: { [Op.in]: allAccessibleFolderIds } }
+                ];
+                delete whereSpreadsheet.createdBy;
+            }
         }
 
         const { rows, count } = await Spreadsheet.findAndCountAll({
@@ -923,6 +970,17 @@ export const createSheet = async (req, res, next) => {
         if (folderId) {
             const folder = await Folder.findOne({ where: { id: folderId, isDeleted: false } });
             if (!folder) throw new AppError("Folder not found", 404);
+
+            // Permission check for staff
+            if (req.user.role === "staff") {
+                const { getInheritedPermission } = await import("../../middleware/rbac.js");
+                const perm = await getInheritedPermission(req.user.id, folderId);
+                
+                const isOwner = folder.createdBy === req.user.id;
+                if (!isOwner && (!perm || !perm.canEdit)) {
+                    throw new AppError("You do not have permission to create sheets in this folder", 403);
+                }
+            }
         }
 
         if (!name?.trim()) throw new AppError("Spreadsheet name is required", 400);
@@ -1245,11 +1303,41 @@ export const duplicateSheet = async (req, res, next) => {
         
         let newSheet;
         await sequelize.transaction(async (t) => {
+            const original = await Spreadsheet.findByPk(id, { transaction: t });
+            if (!original) throw new AppError("Spreadsheet not found", 404);
+
+            const targetFolderId = req.body.folderId || original.folderId;
+
+            // Permission check for staff
+            if (req.user.role === "staff") {
+                const { getInheritedPermission } = await import("../../middleware/rbac.js");
+                
+                // 1. Must be able to view original
+                const isOwner = original.createdBy === req.user.id;
+                const sheetPerm = isOwner ? null : await SheetPermission.findOne({ where: { userId: req.user.id, spreadsheetId: id, canView: true } });
+                
+                let hasViewAccess = isOwner || !!sheetPerm;
+                if (!hasViewAccess && original.folderId) {
+                    const folderPerm = await getInheritedPermission(req.user.id, original.folderId);
+                    if (folderPerm) hasViewAccess = true;
+                }
+                
+                if (!hasViewAccess) throw new AppError("Access denied to original sheet", 403);
+
+                // 2. Must be able to edit target folder
+                if (targetFolderId) {
+                    const parentPerm = await getInheritedPermission(req.user.id, targetFolderId);
+                    const isParentOwner = (await Folder.findByPk(targetFolderId))?.createdBy === req.user.id;
+                    if (!isParentOwner && (!parentPerm || !parentPerm.canEdit)) {
+                        throw new AppError("You do not have permission to create sheets in this location", 403);
+                    }
+                }
+            }
+
             newSheet = await copySheetInternal(id, null, newRequestedName, req.user.id, t);
             // If it was in a folder, keep it in the same folder unless specified
-            const original = await Spreadsheet.findByPk(id, { transaction: t });
-            if (original.folderId && !req.body.folderId) {
-                await newSheet.update({ folderId: original.folderId }, { transaction: t });
+            if (targetFolderId) {
+                await newSheet.update({ folderId: targetFolderId }, { transaction: t });
             }
         });
 

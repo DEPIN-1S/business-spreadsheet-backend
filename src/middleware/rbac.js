@@ -91,19 +91,15 @@ export const checkSheetPermission = (action = "view") => async (req, res, next) 
         logger.info(`[DEBUG] Found permission: canView=${perm.canView}, canEdit=${perm.canEdit}, role=${perm.role}`);
 
         if (action === "view" && !perm.canView) throw new AppError("View access denied", 403);
-        if (action === "edit" && !perm.canEdit) {
-            // Check for granular column edit permissions
+        if (action === "edit") {
             const colPerm = await ColumnPermission.findOne({ where: { userId, spreadsheetId: sheetId } });
-            let hasGranularEdit = false;
             if (colPerm && colPerm.columnAccess) {
                 const access = typeof colPerm.columnAccess === 'string' ? JSON.parse(colPerm.columnAccess) : colPerm.columnAccess;
-                hasGranularEdit = Object.values(access).some(val => val === 'edit');
-            }
-            if (!hasGranularEdit) {
-                throw new AppError("Edit access denied", 403);
-            } else {
-                // Attach a flag to indicate granular edit access
+                const hasGranularEdit = Object.values(access).some(val => val === 'edit');
+                if (!hasGranularEdit) throw new AppError("Edit access denied", 403);
                 perm.hasGranularEdit = true;
+            } else if (!perm.canEdit) {
+                throw new AppError("Edit access denied", 403);
             }
         }
         if (action === "formula" && !perm.canEditFormulas) throw new AppError("Formula edit access denied", 403);

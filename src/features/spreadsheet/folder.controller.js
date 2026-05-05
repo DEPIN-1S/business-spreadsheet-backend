@@ -1,6 +1,9 @@
 import Folder from "./folder.model.js";
 import FolderPermission from "./folder_permission.model.js";
 import Spreadsheet from "./spreadsheet.model.js";
+import Column from "./column.model.js";
+import ColumnPermission from "./column_permission.model.js";
+import User from "../user/user.model.js";
 import AppError from "../../utils/AppError.js";
 import { logAction } from "../../utils/auditLogger.js";
 import { Op } from "sequelize";
@@ -26,10 +29,11 @@ async function wouldCreateCycle(folderId, newParentId) {
 }
 
 // ── Helper: build nested folder tree recursively ─────────────────────────────
-async function buildTree(parentId, userId, role, allowedIds = null) {
+async function buildTree(parentId, userId, role, allowedIds = null, hasParentAccess = false) {
     const where = { parentId: parentId || null, isDeleted: false };
 
-    if (role === "staff") {
+    // If staff and NO parent access, we must filter by direct allowedIds or creator
+    if (role === "staff" && !hasParentAccess) {
         where[Op.or] = [
             { id: { [Op.in]: allowedIds || [] } },
             { createdBy: userId }
@@ -39,7 +43,11 @@ async function buildTree(parentId, userId, role, allowedIds = null) {
     const folders = await Folder.findAll({ where, order: [["name", "ASC"]] });
 
     return Promise.all(folders.map(async (folder) => {
-        const children = await buildTree(folder.id, userId, role, allowedIds);
+        // A child inherits access if the current folder is explicitly allowed, 
+        // or if we already have parent access, or if we created it.
+        const childHasAccess = hasParentAccess || (allowedIds && allowedIds.includes(folder.id)) || folder.createdBy === userId;
+
+        const children = await buildTree(folder.id, userId, role, allowedIds, childHasAccess);
         const sheets = await Spreadsheet.findAll({
             where: { folderId: folder.id, isDeleted: false },
             attributes: ["id", "name", "createdAt"]
@@ -52,11 +60,25 @@ async function buildTree(parentId, userId, role, allowedIds = null) {
 export const createFolder = async (req, res, next) => {
     try {
         const { name, parentId } = req.body;
+        const { role, id: userId } = req.user;
+
         if (!name?.trim()) throw new AppError("Folder name is required", 400);
 
         if (parentId) {
             const parent = await Folder.findOne({ where: { id: parentId, isDeleted: false } });
             if (!parent) throw new AppError("Parent folder not found", 404);
+
+            // Permission check for staff
+            if (role === "staff") {
+                const { getInheritedPermission } = await import("../../middleware/rbac.js");
+                const perm = await getInheritedPermission(userId, parentId);
+                
+                // Must be owner or have edit permission
+                const isOwner = parent.createdBy === userId;
+                if (!isOwner && (!perm || !perm.canEdit)) {
+                    throw new AppError("You do not have permission to create folders in this location", 403);
+                }
+            }
         }
 
         const existing = await Folder.findOne({ 
@@ -155,10 +177,41 @@ export const getFolderTree = async (req, res, next) => {
     try {
         const { role, id: userId } = req.user;
         let allowedIds = null;
+        
         if (role === "staff") {
             const perms = await FolderPermission.findAll({ where: { userId, canView: true }, attributes: ["folderId"] });
             allowedIds = perms.map(p => p.folderId);
+            
+            // For staff, we find all folders they can access
+            const accessibleFolders = await Folder.findAll({
+                where: {
+                    isDeleted: false,
+                    [Op.or]: [
+                        { createdBy: userId },
+                        { id: { [Op.in]: allowedIds } }
+                    ]
+                }
+            });
+
+            // A folder is a "root" for this user if its parent is NOT accessible to them
+            const rootFolders = accessibleFolders.filter(folder => {
+                if (!folder.parentId) return true;
+                return !accessibleFolders.some(f => f.id === folder.parentId);
+            });
+
+            const tree = await Promise.all(rootFolders.map(async (root) => {
+                const children = await buildTree(root.id, userId, role, allowedIds, true);
+                const sheets = await Spreadsheet.findAll({
+                    where: { folderId: root.id, isDeleted: false },
+                    attributes: ["id", "name", "createdAt"]
+                });
+                return { ...root.toJSON(), children, sheets };
+            }));
+
+            return res.json({ data: tree });
         }
+
+        // For admin/superadmin, start from root (parentId: null)
         const tree = await buildTree(null, userId, role, allowedIds);
         res.json({ data: tree });
     } catch (e) { next(e); }
@@ -205,22 +258,121 @@ export const getBreadcrumb = async (req, res, next) => {
     } catch (e) { next(e); }
 };
 
-// ── Set Folder Permission (Admin only) ────────────────────────────────────────
-export const setFolderPermission = async (req, res, next) => {
+// ── Sharing & Permissions ─────────────────────────────────────────────────────
+
+export const shareFolder = async (req, res, next) => {
     try {
-        const { userId, canView = true, canEdit = false } = req.body;
         const { id: folderId } = req.params;
+        const { phone, email, role = "viewer", sheetColumnPermissions = {} } = req.body;
 
         const folder = await Folder.findOne({ where: { id: folderId, isDeleted: false } });
         if (!folder) throw new AppError("Folder not found", 404);
 
+        const user = phone 
+            ? await User.findOne({ where: { phone } })
+            : await User.findOne({ where: { email } });
+
+        if (!user) throw new AppError("User not found", 404);
+
+        const canView = true;
+        const canEdit = role === "editor" || role === "admin";
+
         const [perm, created] = await FolderPermission.upsert(
-            { folderId, userId, canView, canEdit },
+            { userId: user.id, folderId, canView, canEdit },
             { returning: true }
         );
-        res.status(created ? 201 : 200).json({ data: Array.isArray(perm) ? perm[0] : perm, message: "Permission set" });
+
+        // Handle specific file-level column permissions
+        if (Object.keys(sheetColumnPermissions).length > 0) {
+            for (const [sheetId, colAccess] of Object.entries(sheetColumnPermissions)) {
+                await ColumnPermission.upsert({
+                    userId: user.id,
+                    spreadsheetId: sheetId,
+                    columnAccess: colAccess
+                });
+            }
+        }
+
+        await logAction(req.user.id, "folder_permission", folderId, created ? "create" : "update", null,
+            { userId: user.id, role, canView, canEdit, sheetColumnPermissions }, req, { folderId });
+
+        res.status(created ? 201 : 200).json({ data: Array.isArray(perm) ? perm[0] : perm, message: "Folder shared" });
     } catch (e) { next(e); }
 };
+
+export const getNestedSheets = async (req, res, next) => {
+    try {
+        const { id: folderId } = req.params;
+        
+        // 1. Find all nested folders
+        const allFolderIds = [folderId];
+        const collectDescendants = async (parentId) => {
+            const children = await Folder.findAll({ where: { parentId, isDeleted: false }, attributes: ["id"] });
+            for (const child of children) {
+                allFolderIds.push(child.id);
+                await collectDescendants(child.id);
+            }
+        };
+        await collectDescendants(folderId);
+
+        // 2. Find all sheets in these folders
+        const sheets = await Spreadsheet.findAll({
+            where: { folderId: { [Op.in]: allFolderIds }, isDeleted: false },
+            attributes: ["id", "name"]
+        });
+
+        const sheetIds = sheets.map(s => s.id);
+        
+        // 3. Find columns for all these sheets
+        const columns = await Column.findAll({
+            where: { spreadsheetId: { [Op.in]: sheetIds }, isDeleted: false, isHidden: false },
+            attributes: ["id", "name", "spreadsheetId"]
+        });
+
+        // 4. Attach columns to sheets
+        const result = sheets.map(sheet => {
+            const sheetJson = sheet.toJSON();
+            sheetJson.Columns = columns.filter(c => c.spreadsheetId === sheet.id);
+            return sheetJson;
+        });
+
+        res.json({ data: result });
+    } catch (e) { next(e); }
+};
+
+export const listPermissions = async (req, res, next) => {
+    try {
+        const { id: folderId } = req.params;
+        const perms = await FolderPermission.findAll({
+            where: { folderId },
+            include: [{ model: User, attributes: ["id", "name", "email", "role", "avatar", "phone"] }]
+        });
+        
+        // Format to match ShareModal expectation
+        const formattedPerms = perms.map(p => {
+            const pJson = p.toJSON();
+            return {
+                ...pJson,
+                role: p.canEdit ? "editor" : "viewer",
+                User: pJson.User
+            };
+        });
+
+        res.json({ data: { sheetPermissions: formattedPerms, columnPermissions: [] } });
+    } catch (e) { next(e); }
+};
+
+export const removePermission = async (req, res, next) => {
+    try {
+        const { id: folderId, userId } = req.params;
+        const perm = await FolderPermission.findOne({ where: { folderId, userId } });
+        if (!perm) throw new AppError("Permission not found", 404);
+        await perm.destroy();
+        res.json({ message: "Access removed" });
+    } catch (e) { next(e); }
+};
+
+export const setFolderPermission = shareFolder;
 
 /**
  * Internal recursive helper to duplicate a folder and its content.
@@ -267,9 +419,22 @@ export const duplicateFolder = async (req, res, next) => {
         if (!original) throw new AppError("Folder not found", 404);
 
         // Permission check for staff
-        if (req.user.role === "staff" && original.createdBy !== req.user.id) {
-            const perms = await FolderPermission.findOne({ where: { userId: req.user.id, folderId: id, canView: true } });
-            if (!perms) throw new AppError("Access denied", 403);
+        if (req.user.role === "staff") {
+            const { getInheritedPermission } = await import("../../middleware/rbac.js");
+            
+            // 1. Must be able to view original
+            const isOwner = original.createdBy === req.user.id;
+            const perms = isOwner ? null : await FolderPermission.findOne({ where: { userId: req.user.id, folderId: id, canView: true } });
+            if (!isOwner && !perms) throw new AppError("Access denied to original folder", 403);
+
+            // 2. Must be able to edit parent (to create new folder there)
+            if (original.parentId) {
+                const parentPerm = await getInheritedPermission(req.user.id, original.parentId);
+                const isParentOwner = (await Folder.findByPk(original.parentId))?.createdBy === req.user.id;
+                if (!isParentOwner && (!parentPerm || !parentPerm.canEdit)) {
+                    throw new AppError("You do not have permission to create folders in this location", 403);
+                }
+            }
         }
 
         let newFolder;
