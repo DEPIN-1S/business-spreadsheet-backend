@@ -86,8 +86,13 @@ export const createFolder = async (req, res, next) => {
         });
         if (existing) throw new AppError("A folder with this name already exists in this location", 400);
 
-        const folder = await Folder.create({ name: name.trim(), parentId: parentId || null, createdBy: req.user.id });
-        await logAction(req.user.id, "folder", folder.id, "create", null, { name, parentId }, req);
+        const folder = await Folder.create({ 
+            name: name.trim(), 
+            parentId: parentId || null, 
+            createdBy: req.user.id,
+            category: req.body.category || 'personal'
+        });
+        await logAction(req.user.id, "folder", folder.id, "create", null, { name, parentId, category: folder.category }, req);
 
         res.status(201).json({ data: folder, message: "Folder created" });
     } catch (e) { next(e); }

@@ -61,6 +61,10 @@ SheetPermission.belongsTo(User, { foreignKey: "userId" });
 Spreadsheet.hasMany(SheetPermission, { foreignKey: "spreadsheetId", as: "permissions" });
 SheetPermission.belongsTo(Spreadsheet, { foreignKey: "spreadsheetId" });
 
+// Virtual folder and Sharer identification
+SheetPermission.belongsTo(Folder, { as: "virtualFolder", foreignKey: "virtualFolderId" });
+SheetPermission.belongsTo(User, { as: "sharer", foreignKey: "invitedBy", constraints: false });
+
 // Column-level privacy
 User.hasMany(ColumnPermission, { foreignKey: "userId", as: "columnPermissions" });
 ColumnPermission.belongsTo(User, { foreignKey: "userId" });

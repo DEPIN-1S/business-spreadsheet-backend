@@ -10,10 +10,14 @@ const SheetPermission = sequelize.define("SheetPermission", {
     canEdit: { type: DataTypes.BOOLEAN, defaultValue: false },
     canEditFormulas: { type: DataTypes.BOOLEAN, defaultValue: false },
     restrictedColumns: { type: DataTypes.JSON, defaultValue: [] },
-    invitedBy: { type: DataTypes.UUID, allowNull: true }
+    invitedBy: { type: DataTypes.UUID, allowNull: true },
+    virtualFolderId: { type: DataTypes.UUID, allowNull: true, defaultValue: null }
 }, {
     tableName: "sheet_permissions",
-    indexes: [{ unique: true, fields: ["userId", "spreadsheetId"] }]
+    indexes: [
+        { unique: true, fields: ["userId", "spreadsheetId"] },
+        { fields: ["virtualFolderId"] }
+    ]
 });
 
 export default SheetPermission;

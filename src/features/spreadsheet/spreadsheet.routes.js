@@ -8,7 +8,7 @@ import {
     toggleColumnHidden, toggleColumnLocked,
     shareSheet, updateShareRole, removeShare, getSharedWithMe, setPermission, listPermissions,
     createSheet, getSheet, deleteSheet, duplicateSheet,
-    exportSheet, importSheet, copyRow, updateSheetSort
+    exportSheet, importSheet, copyRow, updateSheetSort, moveSharedItem
 } from "./spreadsheet.controller.js";
 import { protect } from "../../middleware/auth.js";
 import { checkSheetPermission } from "../../middleware/rbac.js";
@@ -21,7 +21,8 @@ router.use(protect());
 
 // Spreadsheet List & CRUD
 router.get("/", listSheets); // Unified listing
-router.get("/shared", (req, res, next) => { req.query.shared = "true"; next(); }, listSheets);
+router.get("/shared", getSharedWithMe);
+router.patch("/:id/move-shared", moveSharedItem);
 router.post("/", validate(schemas.createSheet), createSheet);
 router.post("/import", importSheet);
 router.get("/:id", checkSheetPermission("view"), getSheet);

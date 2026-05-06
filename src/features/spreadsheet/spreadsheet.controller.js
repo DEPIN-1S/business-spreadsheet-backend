@@ -922,18 +922,126 @@ export const removeShare = async (req, res, next) => {
 export const getSharedWithMe = async (req, res, next) => {
     try {
         const { page, limit, offset } = getPagination(req);
-        const perms = await SheetPermission.findAll({ where: { userId: req.user.id } });
-        const sheetIds = perms.map(p => p.spreadsheetId);
-        const { rows, count } = await Spreadsheet.findAndCountAll({
-            where: { id: sheetIds, isDeleted: false },
-            limit, offset, order: [["createdAt", "DESC"]],
-            include: [{ model: User, as: "creator", attributes: ["id", "name", "email", "avatar"] }]
+        const { folderId } = req.query; // virtual folder id
+
+        // 1. Fetch shared files (via SheetPermission)
+        const wherePerm = { userId: req.user.id };
+        if (folderId !== undefined) {
+            wherePerm.virtualFolderId = (folderId === "root" || !folderId) ? null : folderId;
+        }
+
+        const { rows: perms, count: sharedCount } = await SheetPermission.findAndCountAll({
+            where: wherePerm,
+            include: [
+                {
+                    model: Spreadsheet,
+                    where: { isDeleted: false },
+                    include: [{ model: User, as: "creator", attributes: ["id", "name", "email", "role", "avatar"] }]
+                },
+                {
+                    model: User,
+                    as: "sharer",
+                    attributes: ["id", "name", "role", "avatar"]
+                }
+            ]
         });
-        const data = rows.map(sheet => {
-            const p = perms.find(perm => perm.spreadsheetId === sheet.id);
-            return { ...sheet.toJSON(), permissionRole: p ? p.role : "viewer" };
+
+        const sharedData = perms.map(p => {
+            const sheet = p.Spreadsheet.toJSON();
+            return {
+                ...sheet,
+                permissionRole: p.role,
+                sharedAt: p.createdAt,
+                sharedBy: p.sharer ? {
+                    id: p.sharer.id,
+                    name: p.sharer.name,
+                    role: p.sharer.role
+                } : (sheet.creator ? {
+                    id: sheet.creator.id,
+                    name: sheet.creator.name,
+                    role: sheet.creator.role
+                } : null),
+                virtualFolderId: p.virtualFolderId,
+                isOwned: false
+            };
         });
-        res.json({ data, meta: getMeta(page, limit, count) });
+
+        // 2. Fetch owned files in this specific virtual folder (if any)
+        const ownedSheets = await Spreadsheet.findAll({
+            where: {
+                createdBy: req.user.id,
+                folderId: (folderId === "root" || !folderId) ? null : folderId,
+                isDeleted: false
+            },
+            include: [{ model: User, as: "creator", attributes: ["id", "name", "email", "role", "avatar"] }]
+        });
+        const ownedData = ownedSheets.map(sheet => ({
+            ...sheet.toJSON(),
+            permissionRole: "owner",
+            sharedBy: { id: req.user.id, name: "Me", role: req.user.role },
+            isOwned: true
+        }));
+
+        // Combine and handle pagination manually if needed, or just return both
+        // For simplicity, we'll combine them and return
+        const combinedFiles = [...sharedData, ...ownedData];
+        // Sort by date desc
+        combinedFiles.sort((a, b) => new Date(b.sharedAt || b.createdAt) - new Date(a.sharedAt || a.createdAt));
+
+        // 3. Fetch virtual folders owned by the user
+        let folders = [];
+        if (page === 1 || page === "1") {
+            folders = await Folder.findAll({
+                where: {
+                    createdBy: req.user.id,
+                    category: 'shared_org',
+                    parentId: (folderId === "root" || !folderId) ? null : folderId,
+                    isDeleted: false
+                }
+            });
+        }
+
+        res.json({ 
+            data: { 
+                files: combinedFiles.slice(offset, offset + limit),
+                folders: folders
+            }, 
+            meta: getMeta(page, limit, sharedCount + ownedData.length) 
+        });
+    } catch (e) { next(e); }
+};
+
+export const moveSharedItem = async (req, res, next) => {
+    try {
+        const { id: spreadsheetId } = req.params;
+        const { folderId } = req.body; // Can be null for root
+
+        // 1. Check if the user owns the spreadsheet
+        const sheet = await Spreadsheet.findOne({ where: { id: spreadsheetId, createdBy: req.user.id } });
+        if (sheet) {
+            sheet.folderId = (folderId === "root" || !folderId) ? null : folderId;
+            await sheet.save();
+            await logAction(req.user.id, "spreadsheet", spreadsheetId, "move", null, { folderId: sheet.folderId }, req);
+            return res.json({ message: "Personal file moved successfully", data: sheet });
+        }
+
+        // 2. Otherwise, check for a shared permission record
+        const perm = await SheetPermission.findOne({ 
+            where: { spreadsheetId, userId: req.user.id } 
+        });
+        if (!perm) throw new AppError("Item not found or not shared with you", 404);
+
+        if (folderId && folderId !== "root") {
+            const folder = await Folder.findOne({ 
+                where: { id: folderId, createdBy: req.user.id, category: 'shared_org', isDeleted: false } 
+            });
+            if (!folder) throw new AppError("Target folder not found or invalid", 404);
+        }
+
+        await perm.update({ virtualFolderId: (folderId === "root" || !folderId) ? null : folderId });
+        await logAction(req.user.id, "permission", spreadsheetId, "move_shared", null, { virtualFolderId: folderId }, req, { spreadsheetId });
+
+        res.json({ message: "Shared file moved successfully", virtualFolderId: folderId });
     } catch (e) { next(e); }
 };
 
