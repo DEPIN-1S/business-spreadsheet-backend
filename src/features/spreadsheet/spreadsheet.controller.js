@@ -139,9 +139,9 @@ export const getSheetData = async (req, res, next) => {
                 attributes: [],
                 where: {
                     [Op.or]: [
-                        { rawValue: { [Op.like]: `${searchKeyword}%` } },
-                        { computedValue: { [Op.like]: `${searchKeyword}%` } },
-                        { formattedValue: { [Op.like]: `${searchKeyword}%` } }
+                        { rawValue: { [Op.like]: `%${searchKeyword}%` } },
+                        { computedValue: { [Op.like]: `%${searchKeyword}%` } },
+                        { formattedValue: { [Op.like]: `%${searchKeyword}%` } }
                     ]
                 },
                 required: true // INNER JOIN to filter rows
@@ -171,6 +171,10 @@ export const getSheetData = async (req, res, next) => {
             rowColor: row.rowColor,
             isBold: row.isBold,
             isItalic: row.isItalic,
+            isUnderline: row.isUnderline,
+            isStrikethrough: row.isStrikethrough,
+            fontFamily: row.fontFamily,
+            alignment: row.alignment,
             isLocked: row.isLocked,
             nestedSheetId: row.nestedSheetId,
             cells: columns.map((col, ci) => {
@@ -178,6 +182,16 @@ export const getSheetData = async (req, res, next) => {
                 let fValue = cell?.formattedValue ?? null;
                 if (col.type === 'currency' && cell?.computedValue !== null && cell?.computedValue !== undefined) {
                     fValue = formatCurrencyValue(parseFloat(cell.computedValue), cell.currencyCode || col.currencyCode) || fValue;
+                }
+                // Recompute time formatted value (HH:MM AM/PM) if rawValue exists
+                if (col.type === 'time' && cell?.rawValue) {
+                    const parts = cell.rawValue.split(':');
+                    const h = parseInt(parts[0], 10);
+                    if (!isNaN(h) && parts.length >= 2) {
+                        const ampm = h >= 12 ? 'PM' : 'AM';
+                        const h12 = h % 12 || 12;
+                        fValue = `${h12}:${parts[1]} ${ampm}`;
+                    }
                 }
                 return {
                     id: cell?.id || null,
@@ -193,6 +207,10 @@ export const getSheetData = async (req, res, next) => {
                     bgColor: cell?.bgColor ?? null,
                     isBold: cell?.isBold ?? false,
                     isItalic: cell?.isItalic ?? false,
+                    isUnderline: cell?.isUnderline ?? false,
+                    isStrikethrough: cell?.isStrikethrough ?? false,
+                    fontFamily: cell?.fontFamily ?? null,
+                    alignment: cell?.alignment ?? null,
                     nestedSheetId: cell?.nestedSheetId ?? null,
                     ref: `${indexToLetter(ci)}${ri + 1 + offset}`
                 };
@@ -222,7 +240,7 @@ export const getSheetData = async (req, res, next) => {
 export const updateCell = async (req, res, next) => {
     try {
         const { id: spreadsheetId, cellId } = req.params;
-        const { rawValue, formattedValue, fileUrl, currencyCode, bgColor, isBold, isItalic, nestedSheetId } = req.body;
+        const { rawValue, formattedValue, fileUrl, currencyCode, bgColor, isBold, isItalic, isUnderline, isStrikethrough, fontFamily, alignment, nestedSheetId } = req.body;
 
 
 
@@ -260,6 +278,17 @@ export const updateCell = async (req, res, next) => {
                     finalRaw = d.toISOString().slice(0, 10);
                     finalFormatted = d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
                 }
+            } else if (col.type === "time" && rawValue) {
+                // Accept HH:MM or HH:MM:SS — store as HH:MM, display as H:MM AM/PM
+                const timeParts = rawValue.match(/^(\d{1,2}):(\d{2})(:\d{2})?$/);
+                if (timeParts) {
+                    const h = parseInt(timeParts[1], 10);
+                    const mm = timeParts[2];
+                    const ampm = h >= 12 ? 'PM' : 'AM';
+                    const h12 = h % 12 || 12;
+                    finalRaw = `${String(h).padStart(2, '0')}:${mm}`;
+                    finalFormatted = `${h12}:${mm} ${ampm}`;
+                }
             } else if (col.type === "number" && rawValue !== "" && !isNaN(parseFloat(rawValue))) {
                 const num = parseFloat(rawValue);
                 finalRaw = String(num);
@@ -283,6 +312,10 @@ export const updateCell = async (req, res, next) => {
         if (bgColor !== undefined) updateData.bgColor = bgColor;
         if (isBold !== undefined) updateData.isBold = isBold;
         if (isItalic !== undefined) updateData.isItalic = isItalic;
+        if (isUnderline !== undefined) updateData.isUnderline = isUnderline;
+        if (isStrikethrough !== undefined) updateData.isStrikethrough = isStrikethrough;
+        if (fontFamily !== undefined) updateData.fontFamily = fontFamily || null;
+        if (alignment !== undefined) updateData.alignment = alignment || null;
         if (currencyCode !== undefined) updateData.currencyCode = currencyCode;
         if (nestedSheetId !== undefined) updateData.nestedSheetId = nestedSheetId;
         updateData.updatedBy = req.user.id;
@@ -303,6 +336,15 @@ export const updateCell = async (req, res, next) => {
                 rawValue: cell.rawValue,
                 formattedValue: cell.formattedValue,
                 computedValue: cell.computedValue,
+                bgColor: cell.bgColor,
+                isBold: cell.isBold,
+                isItalic: cell.isItalic,
+                isUnderline: cell.isUnderline,
+                isStrikethrough: cell.isStrikethrough,
+                fontFamily: cell.fontFamily,
+                alignment: cell.alignment,
+                fileUrl: cell.fileUrl,
+                currencyCode: cell.currencyCode,
                 updatedBy: req.user.id,
                 at: new Date().toISOString()
             });
@@ -319,7 +361,7 @@ export const updateCell = async (req, res, next) => {
 // ── Upsert cell ───────────────────────────────────────────────────────────────
 export const upsertCell = async (req, res, next) => {
     try {
-        const { rowId, columnId, rawValue, fileUrl, formattedValue, currencyCode, bgColor, isBold, isItalic, nestedSheetId } = req.body;
+        const { rowId, columnId, rawValue, fileUrl, formattedValue, currencyCode, bgColor, isBold, isItalic, isUnderline, isStrikethrough, fontFamily, alignment, nestedSheetId } = req.body;
         const { id: spreadsheetId } = req.params;
 
         // Granular permission check for staff
@@ -351,6 +393,17 @@ export const upsertCell = async (req, res, next) => {
                     finalRaw = d.toISOString().slice(0, 10);
                     finalFormatted = d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
                 }
+            } else if (col.type === "time" && rawValue) {
+                // Accept HH:MM or HH:MM:SS — store as HH:MM, display as H:MM AM/PM
+                const timeParts = rawValue.match(/^(\d{1,2}):(\d{2})(:\d{2})?$/);
+                if (timeParts) {
+                    const h = parseInt(timeParts[1], 10);
+                    const mm = timeParts[2];
+                    const ampm = h >= 12 ? 'PM' : 'AM';
+                    const h12 = h % 12 || 12;
+                    finalRaw = `${String(h).padStart(2, '0')}:${mm}`;
+                    finalFormatted = `${h12}:${mm} ${ampm}`;
+                }
             } else if (col.type === "number" && rawValue !== "" && !isNaN(parseFloat(rawValue))) {
                 const num = parseFloat(rawValue);
                 finalRaw = String(num);
@@ -376,6 +429,10 @@ export const upsertCell = async (req, res, next) => {
             if (bgColor !== undefined) updateData.bgColor = bgColor;
             if (isBold !== undefined) updateData.isBold = isBold;
             if (isItalic !== undefined) updateData.isItalic = isItalic;
+            if (isUnderline !== undefined) updateData.isUnderline = isUnderline;
+            if (isStrikethrough !== undefined) updateData.isStrikethrough = isStrikethrough;
+            if (fontFamily !== undefined) updateData.fontFamily = fontFamily || null;
+            if (alignment !== undefined) updateData.alignment = alignment || null;
             if (currencyCode !== undefined) updateData.currencyCode = currencyCode;
             if (nestedSheetId !== undefined) updateData.nestedSheetId = nestedSheetId;
             updateData.updatedBy = req.user.id;
@@ -389,6 +446,10 @@ export const upsertCell = async (req, res, next) => {
                 currencyCode, fileUrl, bgColor, 
                 isBold: isBold ?? false,
                 isItalic: isItalic ?? false,
+                isUnderline: isUnderline ?? false,
+                isStrikethrough: isStrikethrough ?? false,
+                fontFamily: fontFamily ?? null,
+                alignment: alignment ?? null,
                 nestedSheetId: nestedSheetId ?? null,
                 updatedBy: req.user.id
             });
@@ -406,6 +467,15 @@ export const upsertCell = async (req, res, next) => {
                 formattedValue: cellResult.formattedValue,
                 computedValue: cellResult.computedValue,
                 nestedSheetId: cellResult.nestedSheetId,
+                bgColor: cellResult.bgColor,
+                isBold: cellResult.isBold,
+                isItalic: cellResult.isItalic,
+                isUnderline: cellResult.isUnderline,
+                isStrikethrough: cellResult.isStrikethrough,
+                fontFamily: cellResult.fontFamily,
+                alignment: cellResult.alignment,
+                fileUrl: cellResult.fileUrl,
+                currencyCode: cellResult.currencyCode,
                 updatedBy: req.user.id,
                 at: new Date().toISOString()
             });
@@ -549,6 +619,11 @@ function validateCellValue(value, col) {
             throw new AppError(`Column "${col.name}" requires a valid date (YYYY-MM-DD)`, 422);
         }
     }
+    if (col.type === "time" && value !== "" && value !== null) {
+        if (!/^\d{1,2}:\d{2}(:\d{2})?$/.test(value)) {
+            throw new AppError(`Column "${col.name}" requires a valid time (HH:MM)`, 422);
+        }
+    }
     if (col.type === "multi_image" && value) {
         try {
             const arr = JSON.parse(value);
@@ -565,7 +640,7 @@ function validateCellValue(value, col) {
 export const addRow = async (req, res, next) => {
     try {
         const { id: spreadsheetId } = req.params;
-        const { rowColor, height, isBold, isItalic, targetRowId, position } = req.body;
+        const { rowColor, height, isBold, isItalic, isUnderline, isStrikethrough, fontFamily, alignment, targetRowId, position } = req.body;
         
         let newOrder;
         
@@ -595,7 +670,11 @@ export const addRow = async (req, res, next) => {
             rowColor, 
             height,
             isBold: isBold ?? false,
-            isItalic: isItalic ?? false
+            isItalic: isItalic ?? false,
+            isUnderline: isUnderline ?? false,
+            isStrikethrough: isStrikethrough ?? false,
+            fontFamily: fontFamily ?? null,
+            alignment: alignment ?? null
         });
 
         const io = getIO();
@@ -642,7 +721,7 @@ export const reorderRow = async (req, res, next) => {
 export const updateRowColor = async (req, res, next) => {
     try {
         const { id: spreadsheetId, rowId } = req.params;
-        const { rowColor, isBold, isItalic, nestedSheetId } = req.body;
+        const { rowColor, isBold, isItalic, isUnderline, isStrikethrough, fontFamily, alignment, nestedSheetId } = req.body;
 
         const row = await Row.findByPk(rowId);
         if (!row) throw new AppError("Row not found", 404);
@@ -650,12 +729,16 @@ export const updateRowColor = async (req, res, next) => {
         if (rowColor !== undefined) patchData.rowColor = rowColor || null;
         if (isBold !== undefined) patchData.isBold = isBold;
         if (isItalic !== undefined) patchData.isItalic = isItalic;
+        if (isUnderline !== undefined) patchData.isUnderline = isUnderline;
+        if (isStrikethrough !== undefined) patchData.isStrikethrough = isStrikethrough;
+        if (fontFamily !== undefined) patchData.fontFamily = fontFamily || null;
+        if (alignment !== undefined) patchData.alignment = alignment || null;
         if (nestedSheetId !== undefined) patchData.nestedSheetId = nestedSheetId || null;
         
         await row.update(patchData);
 
         const io = getIO();
-        if (io) io.to(`sheet:${spreadsheetId}`).emit("row_updated", { action: "color_changed", sheetId: spreadsheetId, rowId, rowColor });
+        if (io) io.to(`sheet:${spreadsheetId}`).emit("row_updated", { action: "color_changed", sheetId: spreadsheetId, rowId, rowColor, row: row.toJSON() });
 
         res.json({ data: row, message: "Row color updated" });
     } catch (e) { next(e); }
@@ -687,7 +770,11 @@ export const copyRow = async (req, res, next) => {
                 rowColor: originalRow.rowColor, 
                 height: originalRow.height,
                 isBold: originalRow.isBold,
-                isItalic: originalRow.isItalic
+                isItalic: originalRow.isItalic,
+                isUnderline: originalRow.isUnderline,
+                isStrikethrough: originalRow.isStrikethrough,
+                fontFamily: originalRow.fontFamily,
+                alignment: originalRow.alignment
             }, { transaction: t });
 
             const cells = await Cell.findAll({ where: { rowId: originalRow.id } });
@@ -700,6 +787,10 @@ export const copyRow = async (req, res, next) => {
                 bgColor: cell.bgColor,
                 isBold: cell.isBold,
                 isItalic: cell.isItalic,
+                isUnderline: cell.isUnderline,
+                isStrikethrough: cell.isStrikethrough,
+                fontFamily: cell.fontFamily,
+                alignment: cell.alignment,
                 currencyCode: cell.currencyCode,
                 fileUrl: cell.fileUrl,
                 updatedBy: req.user.id
@@ -894,15 +985,27 @@ export const updateShareRole = async (req, res, next) => {
     try {
         const { id: spreadsheetId, userId } = req.params;
         const { role } = req.body;
+        const loggedInUser = req.user;
+
+        const sheet = await Spreadsheet.findOne({ where: { id: spreadsheetId, isDeleted: false } });
+        if (!sheet) throw new AppError("Spreadsheet not found", 404);
+
         const perm = await SheetPermission.findOne({ where: { spreadsheetId, userId } });
         if (!perm) throw new AppError("Permission not found", 404);
+
+        // Security check: non-admins and non-owners can only update users they invited
+        const isAdmin = loggedInUser.role === "admin" || loggedInUser.role === "superadmin";
+        const isOwner = sheet.createdBy === loggedInUser.id;
+        if (!isAdmin && !isOwner && perm.invitedBy !== loggedInUser.id) {
+            throw new AppError("You only have permission to update users you invited", 403);
+        }
 
         const canView = true;
         const canEdit = role === "editor" || role === "admin";
         const canEditFormulas = role === "admin";
 
         await perm.update({ role, canView, canEdit, canEditFormulas });
-        await logAction(req.user.id, "permission", spreadsheetId, "update_role", { oldRole: perm.role }, { userId, role }, req, { spreadsheetId });
+        await logAction(loggedInUser.id, "permission", spreadsheetId, "update_role", { oldRole: perm.role }, { userId, role }, req, { spreadsheetId });
         res.json({ message: "Share role updated", data: perm });
     } catch (e) { next(e); }
 };
@@ -910,11 +1013,38 @@ export const updateShareRole = async (req, res, next) => {
 export const removeShare = async (req, res, next) => {
     try {
         const { id: spreadsheetId, userId } = req.params;
+        const loggedInUser = req.user;
+
+        const sheet = await Spreadsheet.findOne({ where: { id: spreadsheetId, isDeleted: false } });
+        if (!sheet) throw new AppError("Spreadsheet not found", 404);
+
         const perm = await SheetPermission.findOne({ where: { spreadsheetId, userId } });
         if (!perm) throw new AppError("Permission not found", 404);
+
+        // Security check: non-admins and non-owners can only remove users they invited
+        const isAdmin = loggedInUser.role === "admin" || loggedInUser.role === "superadmin";
+        const isOwner = sheet.createdBy === loggedInUser.id;
+        if (!isAdmin && !isOwner && perm.invitedBy !== loggedInUser.id) {
+            throw new AppError("You only have permission to remove users you invited", 403);
+        }
+
+        // Recursive cascading deletion helper
+        const revokeRecursive = async (sId, uId) => {
+            const childPerms = await SheetPermission.findAll({ where: { spreadsheetId: sId, invitedBy: uId } });
+            for (const cp of childPerms) {
+                await revokeRecursive(sId, cp.userId);
+                await ColumnPermission.destroy({ where: { spreadsheetId: sId, userId: cp.userId } });
+                await cp.destroy();
+            }
+        };
+
+        await revokeRecursive(spreadsheetId, userId);
+
         await perm.destroy();
-        await ColumnPermission.destroy({ where: { sheetId: spreadsheetId, userId } });
-        await logAction(req.user.id, "permission", spreadsheetId, "delete", perm.toJSON(), null, req, { spreadsheetId });
+        // Fix: Use correct field 'spreadsheetId' instead of incorrect 'sheetId'
+        await ColumnPermission.destroy({ where: { spreadsheetId, userId } });
+
+        await logAction(loggedInUser.id, "permission", spreadsheetId, "delete", perm.toJSON(), null, req, { spreadsheetId });
         res.json({ message: "Access removed" });
     } catch (e) { next(e); }
 };
@@ -1362,6 +1492,9 @@ export async function copySheetInternal(originalSheetId, targetFolderId, newName
             bgColor: col.bgColor,
             isBold: col.isBold,
             isItalic: col.isItalic,
+            isUnderline: col.isUnderline,
+            isStrikethrough: col.isStrikethrough,
+            fontFamily: col.fontFamily,
             options: col.options,
             validationRules: col.validationRules,
             formulaExpr: col.formulaExpr,
@@ -1378,7 +1511,11 @@ export async function copySheetInternal(originalSheetId, targetFolderId, newName
             rowColor: row.rowColor,
             height: row.height,
             isBold: row.isBold,
-            isItalic: row.isItalic
+            isItalic: row.isItalic,
+            isUnderline: row.isUnderline,
+            isStrikethrough: row.isStrikethrough,
+            fontFamily: row.fontFamily,
+            alignment: row.alignment
         }, { transaction });
 
         const cells = await Cell.findAll({ where: { rowId: row.id }, transaction });
@@ -1391,6 +1528,10 @@ export async function copySheetInternal(originalSheetId, targetFolderId, newName
             bgColor: cell.bgColor,
             isBold: cell.isBold,
             isItalic: cell.isItalic,
+            isUnderline: cell.isUnderline,
+            isStrikethrough: cell.isStrikethrough,
+            fontFamily: cell.fontFamily,
+            alignment: cell.alignment,
             currencyCode: cell.currencyCode,
             fileUrl: cell.fileUrl,
             updatedBy: userId

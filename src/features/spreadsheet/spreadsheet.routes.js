@@ -52,10 +52,10 @@ router.patch("/:id/columns/:colId/toggle-hidden", checkSheetPermission("admin"),
 router.patch("/:id/columns/:colId/toggle-locked", checkSheetPermission("admin"), toggleColumnLocked);
 
 // Sharing & permissions
-router.post("/:id/share", checkSheetPermission("admin"), validate(schemas.shareSheet), shareSheet);
-router.get("/:id/permissions", checkSheetPermission("admin"), listPermissions);
-router.put("/:id/permissions/:userId", checkSheetPermission("admin"), validate(schemas.updateShareRole), updateShareRole);
-router.delete("/:id/permissions/:userId", checkSheetPermission("admin"), removeShare);
+router.post("/:id/share", checkSheetPermission("view"), validate(schemas.shareSheet), shareSheet);
+router.get("/:id/permissions", checkSheetPermission("view"), listPermissions);
+router.put("/:id/permissions/:userId", checkSheetPermission("view"), validate(schemas.updateShareRole), updateShareRole);
+router.delete("/:id/permissions/:userId", checkSheetPermission("view"), removeShare);
 
 // Row management
 router.post("/:id/rows", checkSheetPermission("edit"), addRow);

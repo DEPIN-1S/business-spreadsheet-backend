@@ -126,6 +126,9 @@ export const duplicateSheet = async (req, res, next) => {
           name: col.name, type: col.type, orderIndex: col.orderIndex,
           defaultValue: col.defaultValue, alignment: col.alignment, width: col.width,
           textColor: col.textColor, bgColor: col.bgColor,
+          isBold: col.isBold, isItalic: col.isItalic,
+          isUnderline: col.isUnderline, isStrikethrough: col.isStrikethrough,
+          fontFamily: col.fontFamily,
           options: col.options, validationRules: col.validationRules,
           formulaExpr: col.formulaExpr, currencyCode: col.currencyCode
         }, { transaction: t });
@@ -136,7 +139,10 @@ export const duplicateSheet = async (req, res, next) => {
       for (const row of rows) {
         const newRow = await Row.create({
           spreadsheetId: newSheet.id, order: row.order,
-          rowColor: row.rowColor, height: row.height
+          rowColor: row.rowColor, height: row.height,
+          isBold: row.isBold, isItalic: row.isItalic,
+          isUnderline: row.isUnderline, isStrikethrough: row.isStrikethrough,
+          fontFamily: row.fontFamily, alignment: row.alignment
         }, { transaction: t });
 
         const cells = await Cell.findAll({ where: { rowId: row.id } });
@@ -148,6 +154,13 @@ export const duplicateSheet = async (req, res, next) => {
           computedValue: cell.computedValue,
           currencyCode: cell.currencyCode,
           fileUrl: cell.fileUrl,
+          bgColor: cell.bgColor,
+          isBold: cell.isBold,
+          isItalic: cell.isItalic,
+          isUnderline: cell.isUnderline,
+          isStrikethrough: cell.isStrikethrough,
+          fontFamily: cell.fontFamily,
+          alignment: cell.alignment,
           updatedBy: req.user.id
         })).filter(c => c.columnId);
         if (newCells.length) await Cell.bulkCreate(newCells, { transaction: t });
@@ -181,9 +194,9 @@ export const shareSheet = async (req, res, next) => {
       { returning: true }
     );
     
-    // Upsert column-level permissions if specified
+    // Upsert column-level permissions if specified (Fix: Use 'spreadsheetId' instead of 'sheetId')
     if (columnAccess !== undefined) {
-      await ColumnPermission.upsert({ userId: user.id, sheetId: spreadsheetId, columnAccess });
+      await ColumnPermission.upsert({ userId: user.id, spreadsheetId, columnAccess });
     }
 
     await logAction(req.user.id, "permission", spreadsheetId, created ? "create" : "update", null,
@@ -218,10 +231,22 @@ export const removeShare = async (req, res, next) => {
     const perm = await SheetPermission.findOne({ where: { spreadsheetId, userId } });
     if (!perm) throw new AppError("Permission not found", 404);
     
+    // Recursive cascading deletion helper
+    const revokeRecursive = async (sId, uId) => {
+      const childPerms = await SheetPermission.findAll({ where: { spreadsheetId: sId, invitedBy: uId } });
+      for (const cp of childPerms) {
+        await revokeRecursive(sId, cp.userId);
+        await ColumnPermission.destroy({ where: { spreadsheetId: sId, userId: cp.userId } });
+        await cp.destroy();
+      }
+    };
+
+    await revokeRecursive(spreadsheetId, userId);
+
     await perm.destroy();
     
-    // Also remove column permissions
-    await ColumnPermission.destroy({ where: { sheetId: spreadsheetId, userId } });
+    // Also remove column permissions (Fix: Use 'spreadsheetId' instead of 'sheetId')
+    await ColumnPermission.destroy({ where: { spreadsheetId, userId } });
     
     await logAction(req.user.id, "permission", spreadsheetId, "delete", perm.toJSON(), null, req);
     
@@ -445,7 +470,8 @@ export const listPermissions = async (req, res, next) => {
       where: { spreadsheetId: req.params.id },
       include: [{ model: User, attributes: ["id", "name", "email", "role", "avatar"] }]
     });
-    const colPerms = await ColumnPermission.findAll({ where: { sheetId: req.params.id } });
+    // Fix: Use 'spreadsheetId' instead of 'sheetId'
+    const colPerms = await ColumnPermission.findAll({ where: { spreadsheetId: req.params.id } });
     res.json({ data: { sheetPermissions: perms, columnPermissions: colPerms } });
   } catch (e) { next(e); }
 };

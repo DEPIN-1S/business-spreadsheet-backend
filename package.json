@@ -6,7 +6,8 @@
     "dev": "nodemon src/spreadsheet.js",
     "start": "node src/spreadsheet.js",
     "start:cluster": "pm2 start src/spreadsheet.js -i max",
-    "seed:superadmin": "node src/seeders/createSuperAdmin.js"
+    "seed:superadmin": "node src/seeders/createSuperAdmin.js",
+    "migrate:time": "node migrate_time_enum.js"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",

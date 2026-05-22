@@ -56,7 +56,17 @@ export const schemas = {
     }),
 
     updateCell: Joi.object({
-        rawValue: Joi.string().allow("", null).required()
+        rawValue: Joi.string().allow("", null).required(),
+        isBold: Joi.boolean().optional(),
+        isItalic: Joi.boolean().optional(),
+        isUnderline: Joi.boolean().optional(),
+        isStrikethrough: Joi.boolean().optional(),
+        fontFamily: Joi.string().allow(null, "").optional(),
+        alignment: Joi.string().valid("left", "center", "right").allow(null, "").optional(),
+        bgColor: Joi.string().allow(null, "").optional(),
+        currencyCode: Joi.string().allow(null, "").optional(),
+        fileUrl: Joi.string().allow(null, "").optional(),
+        nestedSheetId: Joi.string().uuid().allow(null, "").optional()
     }),
 
     permission: Joi.object({

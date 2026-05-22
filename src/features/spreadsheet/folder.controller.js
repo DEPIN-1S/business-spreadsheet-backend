@@ -81,8 +81,9 @@ export const createFolder = async (req, res, next) => {
             }
         }
 
+        const category = req.body.category || 'personal';
         const existing = await Folder.findOne({ 
-            where: { name: name.trim(), parentId: parentId || null, isDeleted: false } 
+            where: { name: name.trim(), parentId: parentId || null, category, isDeleted: false } 
         });
         if (existing) throw new AppError("A folder with this name already exists in this location", 400);
 
@@ -90,7 +91,7 @@ export const createFolder = async (req, res, next) => {
             name: name.trim(), 
             parentId: parentId || null, 
             createdBy: req.user.id,
-            category: req.body.category || 'personal'
+            category
         });
         await logAction(req.user.id, "folder", folder.id, "create", null, { name, parentId, category: folder.category }, req);
 
