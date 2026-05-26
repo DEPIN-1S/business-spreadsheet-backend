@@ -108,10 +108,12 @@ export const duplicateSheet = async (req, res, next) => {
     const original = await Spreadsheet.findOne({ where: { id: req.params.id, isDeleted: false } });
     if (!original) throw new AppError("Spreadsheet not found", 404);
 
+    const { name: newRequestedName } = req.body;
+
     let newSheet;
     await sequelize.transaction(async (t) => {
       newSheet = await Spreadsheet.create({
-        name: `${original.name} (Copy)`,
+        name: newRequestedName || `${original.name} (Copy)`,
         description: original.description,
         folderId: original.folderId,
         settings: original.settings,

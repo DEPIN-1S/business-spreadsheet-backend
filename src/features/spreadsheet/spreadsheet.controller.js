@@ -862,7 +862,15 @@ export const listSheets = async (req, res, next) => {
             const sharedIds = perms.map(p => p.spreadsheetId);
             whereSpreadsheet.id = sharedIds;
             whereSpreadsheet.createdBy = { [Op.ne]: userId }; // Exclude owned
-        } else if (role !== "superadmin" && role !== "admin") {
+        } else if (role === "superadmin" || role === "admin") {
+            // For admin/superadmin in "My Files", show sheets created by any admin/superadmin
+            const adminUsers = await User.findAll({
+                where: { role: ["superadmin", "admin"] },
+                attributes: ["id"]
+            });
+            const adminUserIds = adminUsers.map(u => u.id);
+            whereSpreadsheet.createdBy = { [Op.in]: adminUserIds };
+        } else {
             // For staff users, include:
             // 1. Sheets they created
             // 2. Sheets shared with them directly

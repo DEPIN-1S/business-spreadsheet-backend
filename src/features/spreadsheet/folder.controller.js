@@ -29,14 +29,22 @@ async function wouldCreateCycle(folderId, newParentId) {
 }
 
 // ── Helper: build nested folder tree recursively ─────────────────────────────
-async function buildTree(parentId, userId, role, allowedIds = null, hasParentAccess = false) {
+async function buildTree(parentId, userId, role, allowedIds = null, hasParentAccess = false, ownerOnly = false) {
     const where = { parentId: parentId || null, isDeleted: false };
 
+    // For admin/superadmin in "My Files" mode, only show folders they created
+    if (ownerOnly) {
+        if (Array.isArray(userId)) {
+            where.createdBy = { [Op.in]: userId };
+        } else {
+            where.createdBy = userId;
+        }
+    }
     // If staff and NO parent access, we must filter by direct allowedIds or creator
-    if (role === "staff" && !hasParentAccess) {
+    else if (role === "staff" && !hasParentAccess) {
         where[Op.or] = [
             { id: { [Op.in]: allowedIds || [] } },
-            { createdBy: userId }
+            { createdBy: Array.isArray(userId) ? { [Op.in]: userId } : userId }
         ];
     }
 
@@ -45,9 +53,11 @@ async function buildTree(parentId, userId, role, allowedIds = null, hasParentAcc
     return Promise.all(folders.map(async (folder) => {
         // A child inherits access if the current folder is explicitly allowed, 
         // or if we already have parent access, or if we created it.
-        const childHasAccess = hasParentAccess || (allowedIds && allowedIds.includes(folder.id)) || folder.createdBy === userId;
+        const childHasAccess = hasParentAccess || 
+            (allowedIds && allowedIds.includes(folder.id)) || 
+            (Array.isArray(userId) ? userId.includes(folder.createdBy) : folder.createdBy === userId);
 
-        const children = await buildTree(folder.id, userId, role, allowedIds, childHasAccess);
+        const children = await buildTree(folder.id, userId, role, allowedIds, childHasAccess, ownerOnly);
         const sheets = await Spreadsheet.findAll({
             where: { folderId: folder.id, isDeleted: false },
             attributes: ["id", "name", "createdAt"]
@@ -217,8 +227,14 @@ export const getFolderTree = async (req, res, next) => {
             return res.json({ data: tree });
         }
 
-        // For admin/superadmin, start from root (parentId: null)
-        const tree = await buildTree(null, userId, role, allowedIds);
+        // For admin/superadmin, show folders created by any admin/superadmin (not staff or normal users)
+        const adminUsers = await User.findAll({
+            where: { role: ["superadmin", "admin"] },
+            attributes: ["id"]
+        });
+        const ownerOnlyIds = adminUsers.map(u => u.id);
+
+        const tree = await buildTree(null, ownerOnlyIds, role, allowedIds, false, true);
         res.json({ data: tree });
     } catch (e) { next(e); }
 };
