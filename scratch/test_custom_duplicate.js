@@ -57,14 +57,45 @@ async function main() {
             failed++;
         }
 
-        // ── 2. Duplicate Folder with Custom Name ────────────────────
-        console.log("\n3️⃣  Creating original test folder...");
+        // ── 2. Duplicate Sheet inside a Subfolder ──────────────────
+        console.log("\n3️⃣  Creating a parent folder and a sheet inside it...");
+        const parentFolderName = `__SUB_DUP_PARENT_${Date.now()}`;
+        const parentFolderRes = await apiCall("POST", "/folders", { name: parentFolderName }, superadmin.token);
+        const parentFolderId = parentFolderRes.data?.data?.id;
+        console.log(`   Created folder: "${parentFolderName}" (id: ${parentFolderId})`);
+
+        const childSheetName = `__SUB_DUP_CHILD_${Date.now()}`;
+        const childSheetRes = await apiCall("POST", "/sheets", { name: childSheetName, folderId: parentFolderId }, superadmin.token);
+        const childSheetId = childSheetRes.data?.data?.id;
+        console.log(`   Created sheet inside folder: "${childSheetName}" (id: ${childSheetId})`);
+
+        console.log("4️⃣  Duplicating the sheet inside the subfolder...");
+        const customSubSheetName = `__CUSTOM_SUB_DUP_SHEET_${Date.now()}`;
+        const subDupRes = await apiCall("POST", `/sheets/${childSheetId}/duplicate`, { name: customSubSheetName }, superadmin.token);
+        const subDupSheetId = subDupRes.data?.data?.id;
+        console.log(`   Duplicated subfolder sheet status: ${subDupRes.status}`);
+
+        if (subDupRes.status === 201 && subDupRes.data?.data?.name === customSubSheetName && subDupRes.data?.data?.folderId === parentFolderId) {
+            console.log(`   ✅ PASS: Sheet duplicated successfully inside subfolder with correct folderId: "${subDupRes.data.data.folderId}"`);
+            passed++;
+        } else {
+            console.log(`   ❌ FAIL: Subfolder sheet duplication failed. Got folderId: "${subDupRes.data?.data?.folderId}" (expected: "${parentFolderId}")`);
+            failed++;
+        }
+
+        // Clean up subfolder test items early to keep variables scoped cleanly
+        if (subDupSheetId) await apiCall("DELETE", `/sheets/${subDupSheetId}`, null, superadmin.token);
+        if (childSheetId) await apiCall("DELETE", `/sheets/${childSheetId}`, null, superadmin.token);
+        if (parentFolderId) await apiCall("DELETE", `/folders/${parentFolderId}`, null, superadmin.token);
+
+        // ── 3. Duplicate Folder with Custom Name ────────────────────
+        console.log("\n5️⃣  Creating original test folder...");
         const originalFolderName = `__ORIGINAL_FOLDER_${Date.now()}`;
         const folderRes = await apiCall("POST", "/folders", { name: originalFolderName }, superadmin.token);
         testFolderId = folderRes.data?.data?.id;
         console.log(`   Created original folder: "${originalFolderName}" (id: ${testFolderId})`);
 
-        console.log("4️⃣  Duplicating folder with a custom name...");
+        console.log("6️⃣  Duplicating folder with a custom name...");
         const customFolderName = `__CUSTOM_DUP_FOLDER_${Date.now()}`;
         const dupFolderRes = await apiCall("POST", `/folders/${testFolderId}/duplicate`, { name: customFolderName }, superadmin.token);
         dupFolderId = dupFolderRes.data?.data?.id;

@@ -1591,11 +1591,7 @@ export const duplicateSheet = async (req, res, next) => {
                 }
             }
 
-            newSheet = await copySheetInternal(id, null, newRequestedName, req.user.id, t);
-            // If it was in a folder, keep it in the same folder unless specified
-            if (targetFolderId) {
-                await newSheet.update({ folderId: targetFolderId }, { transaction: t });
-            }
+            newSheet = await copySheetInternal(id, targetFolderId, newRequestedName, req.user.id, t);
         });
 
         await logAction(req.user.id, "sheet", newSheet.id, "create", null, { duplicatedFrom: id }, req, { spreadsheetId: newSheet.id });
