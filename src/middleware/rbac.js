@@ -3,6 +3,7 @@ import FolderPermission from "../features/spreadsheet/folder_permission.model.js
 import ColumnPermission from "../features/spreadsheet/column_permission.model.js";
 import Spreadsheet from "../features/spreadsheet/spreadsheet.model.js";
 import Folder from "../features/spreadsheet/folder.model.js";
+import Cell from "../features/spreadsheet/cell.model.js";
 import AppError from "../utils/AppError.js";
 import logger from "../config/logger.js";
 
@@ -45,8 +46,8 @@ export const checkSheetPermission = (action = "view") => async (req, res, next) 
         } else if (role === "staff") {
             logger.info(`[DEBUG] No direct SheetPermission, checking owner/inheritance for staff user=${userId}, sheetId=${sheetId}`);
             
-            // Fetch sheet to check owner (createdBy) and folderId
-            const sheet = await Spreadsheet.findOne({ where: { id: sheetId, isDeleted: false }, attributes: ["id", "folderId", "createdBy"] });
+            // Fetch sheet to check owner (createdBy), folderId, and isDetailedView
+            const sheet = await Spreadsheet.findOne({ where: { id: sheetId, isDeleted: false }, attributes: ["id", "folderId", "createdBy", "isDetailedView"] });
             
             if (sheet) {
                 // 1. Owner Check
@@ -76,6 +77,42 @@ export const checkSheetPermission = (action = "view") => async (req, res, next) 
                             isInherited: true
                         };
                         logger.info(`[DEBUG] Inherited recursive permission from folder=${folderPerm.folderId}`);
+                    }
+                }
+                // 3. Nested Sheet Check
+                else if (sheet.isDetailedView) {
+                    const cell = await Cell.findOne({ where: { nestedSheetId: sheetId }, attributes: ["rowId"] });
+                    if (cell) {
+                        const Row = (await import("../features/spreadsheet/row.model.js")).default;
+                        const row = await Row.findOne({ where: { id: cell.rowId }, attributes: ["spreadsheetId"] });
+                        if (row && row.spreadsheetId) {
+                            const parentPerm = await SheetPermission.findOne({ where: { userId, spreadsheetId: row.spreadsheetId } });
+                            if (parentPerm) {
+                                perm = {
+                                    userId,
+                                    spreadsheetId: sheetId,
+                                    canView: true,
+                                    canEdit: parentPerm.canEdit,
+                                    canEditFormulas: parentPerm.canEditFormulas,
+                                    role: parentPerm.role,
+                                    isInherited: true
+                                };
+                                logger.info(`[DEBUG] Inherited nested permission from parent sheet=${row.spreadsheetId}`);
+                            } else {
+                                // Maybe inherited from parent folder? We can check via recursion, but let's do a simple folder check
+                                const parentSheet = await Spreadsheet.findOne({ where: { id: row.spreadsheetId, isDeleted: false }, attributes: ["folderId", "createdBy"] });
+                                if (parentSheet) {
+                                    if (parentSheet.createdBy === userId) {
+                                        perm = { userId, spreadsheetId: sheetId, canView: true, canEdit: true, canEditFormulas: true, role: "admin", isOwner: true };
+                                    } else if (parentSheet.folderId) {
+                                        const parentFolderPerm = await getInheritedPermission(userId, parentSheet.folderId);
+                                        if (parentFolderPerm) {
+                                            perm = { userId, spreadsheetId: sheetId, canView: true, canEdit: parentFolderPerm.canEdit, canEditFormulas: false, role: parentFolderPerm.canEdit ? "editor" : "viewer", isInherited: true };
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             } else {
@@ -124,7 +161,7 @@ export const attachSheetPermission = async (req, res, next) => {
 
         let perm = await SheetPermission.findOne({ where: { userId, spreadsheetId: sheetId } });
         if (!perm) {
-            const sheet = await Spreadsheet.findOne({ where: { id: sheetId, isDeleted: false }, attributes: ["folderId", "createdBy"] });
+            const sheet = await Spreadsheet.findOne({ where: { id: sheetId, isDeleted: false }, attributes: ["folderId", "createdBy", "isDetailedView"] });
             if (sheet) {
                 if (sheet.createdBy === userId) {
                     perm = {
@@ -148,6 +185,30 @@ export const attachSheetPermission = async (req, res, next) => {
                             role: folderPerm.canEdit ? "editor" : "viewer",
                             isInherited: true
                         };
+                    }
+                } else if (sheet.isDetailedView) {
+                    const cell = await Cell.findOne({ where: { nestedSheetId: sheetId }, attributes: ["rowId"] });
+                    if (cell) {
+                        const Row = (await import("../features/spreadsheet/row.model.js")).default;
+                        const row = await Row.findOne({ where: { id: cell.rowId }, attributes: ["spreadsheetId"] });
+                        if (row && row.spreadsheetId) {
+                            const parentPerm = await SheetPermission.findOne({ where: { userId, spreadsheetId: row.spreadsheetId } });
+                            if (parentPerm) {
+                                perm = { userId, spreadsheetId: sheetId, canView: true, canEdit: parentPerm.canEdit, canEditFormulas: parentPerm.canEditFormulas, role: parentPerm.role, isInherited: true };
+                            } else {
+                                const parentSheet = await Spreadsheet.findOne({ where: { id: row.spreadsheetId, isDeleted: false }, attributes: ["folderId", "createdBy"] });
+                                if (parentSheet) {
+                                    if (parentSheet.createdBy === userId) {
+                                        perm = { userId, spreadsheetId: sheetId, canView: true, canEdit: true, canEditFormulas: true, role: "admin", isOwner: true };
+                                    } else if (parentSheet.folderId) {
+                                        const parentFolderPerm = await getInheritedPermission(userId, parentSheet.folderId);
+                                        if (parentFolderPerm) {
+                                            perm = { userId, spreadsheetId: sheetId, canView: true, canEdit: parentFolderPerm.canEdit, canEditFormulas: false, role: parentFolderPerm.canEdit ? "editor" : "viewer", isInherited: true };
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

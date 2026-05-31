@@ -455,6 +455,28 @@ export const upsertCell = async (req, res, next) => {
             });
         }
 
+        // Auto-share new nested sheet with all users who have access to the parent sheet
+        if (nestedSheetId !== undefined && nestedSheetId !== null) {
+            const parentPerms = await SheetPermission.findAll({ where: { spreadsheetId } });
+            if (parentPerms.length > 0) {
+                const nestedSheet = await Spreadsheet.findOne({ where: { id: nestedSheetId, isDeleted: false, isDetailedView: true } });
+                if (nestedSheet) {
+                    for (const perm of parentPerms) {
+                        await SheetPermission.upsert({
+                            userId: perm.userId,
+                            spreadsheetId: nestedSheetId,
+                            role: perm.role,
+                            canView: perm.canView,
+                            canEdit: perm.canEdit,
+                            canEditFormulas: false,
+                            restrictedColumns: [],
+                            invitedBy: req.user.id
+                        });
+                    }
+                }
+            }
+        }
+
         const updatedCells = await recalculateFormulas(spreadsheetId);
         const cellResult = Array.isArray(cell) ? cell[0] : cell;
 
@@ -979,6 +1001,36 @@ export const shareSheet = async (req, res, next) => {
             logger.info(`[DEBUG] ColumnPermission upserted: ${cpCreated ? 'created' : 'updated'}`);
         }
 
+        // Auto-share nested sheets (CC files)
+        const rows = await Row.findAll({ where: { spreadsheetId, isDeleted: false }, attributes: ['id'] });
+        if (rows.length > 0) {
+            const cellsWithNested = await Cell.findAll({ 
+                where: { 
+                    rowId: { [Op.in]: rows.map(r => r.id) },
+                    nestedSheetId: { [Op.ne]: null }
+                },
+                attributes: ['nestedSheetId']
+            });
+            const nestedSheetIds = [...new Set(cellsWithNested.map(c => c.nestedSheetId))];
+            
+            for (const nestedId of nestedSheetIds) {
+                // Ensure the nested sheet actually exists
+                const nestedSheet = await Spreadsheet.findOne({ where: { id: nestedId, isDeleted: false, isDetailedView: true } });
+                if (nestedSheet) {
+                    await SheetPermission.upsert({
+                        userId: user.id, 
+                        spreadsheetId: nestedId, 
+                        role, 
+                        canView, 
+                        canEdit, 
+                        canEditFormulas: false, 
+                        restrictedColumns: [], 
+                        invitedBy: req.user.id
+                    });
+                }
+            }
+        }
+
         await logAction(req.user.id, "permission", spreadsheetId, created ? "create" : "update", null,
             { userId: user.id, role, canView, canEdit, columnAccess }, req, { spreadsheetId });
 
@@ -1047,6 +1099,27 @@ export const removeShare = async (req, res, next) => {
         };
 
         await revokeRecursive(spreadsheetId, userId);
+
+        // Cascade remove from nested sheets (CC files)
+        const rows = await Row.findAll({ where: { spreadsheetId, isDeleted: false }, attributes: ['id'] });
+        if (rows.length > 0) {
+            const cellsWithNested = await Cell.findAll({ 
+                where: { 
+                    rowId: { [Op.in]: rows.map(r => r.id) },
+                    nestedSheetId: { [Op.ne]: null }
+                },
+                attributes: ['nestedSheetId']
+            });
+            const nestedSheetIds = [...new Set(cellsWithNested.map(c => c.nestedSheetId))];
+            
+            for (const nestedId of nestedSheetIds) {
+                const nestedSheet = await Spreadsheet.findOne({ where: { id: nestedId, isDeleted: false, isDetailedView: true } });
+                if (nestedSheet) {
+                    await SheetPermission.destroy({ where: { spreadsheetId: nestedId, userId } });
+                    await revokeRecursive(nestedId, userId);
+                }
+            }
+        }
 
         await perm.destroy();
         // Fix: Use correct field 'spreadsheetId' instead of incorrect 'sheetId'
@@ -1453,8 +1526,14 @@ export const updateSheetSort = async (req, res, next) => {
 
 export const deleteSheet = async (req, res, next) => {
     try {
+        const { role, id: userId } = req.user;
         const sheet = await Spreadsheet.findOne({ where: { id: req.params.id, isDeleted: false } });
         if (!sheet) throw new AppError("Spreadsheet not found", 404);
+
+        if (role === "staff" && sheet.createdBy !== userId) {
+            throw new AppError("Only the creator or an admin can delete this spreadsheet", 403);
+        }
+
         await sheet.update({ isDeleted: true });
         await logAction(req.user.id, "sheet", sheet.id, "delete", null, null, req, { spreadsheetId: sheet.id });
         res.json({ message: "Spreadsheet deleted" });
