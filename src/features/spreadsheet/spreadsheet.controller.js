@@ -663,47 +663,66 @@ export const addRow = async (req, res, next) => {
     try {
         const { id: spreadsheetId } = req.params;
         const { rowColor, height, isBold, isItalic, isUnderline, isStrikethrough, fontFamily, alignment, targetRowId, position } = req.body;
+        const quantity = parseInt(req.body.count) || 1;
         
-        let newOrder;
+        const createdRows = [];
         
-        if (targetRowId && position) {
-            const targetRow = await Row.findByPk(targetRowId);
-            if (!targetRow) throw new AppError("Target row not found", 404);
-            
-            newOrder = position === 'above' ? targetRow.order : targetRow.order + 1;
-            
-            // Shift subsequent rows
-            await Row.increment('order', {
-                by: 1,
-                where: {
-                    spreadsheetId,
-                    isDeleted: false,
-                    order: { [Op.gte]: newOrder }
-                }
-            });
-        } else {
-            const count = await Row.count({ where: { spreadsheetId, isDeleted: false } });
-            newOrder = count;
-        }
-        
-        const row = await Row.create({ 
-            spreadsheetId, 
-            order: newOrder, 
-            rowColor, 
-            height,
-            isBold: isBold ?? false,
-            isItalic: isItalic ?? false,
-            isUnderline: isUnderline ?? false,
-            isStrikethrough: isStrikethrough ?? false,
-            fontFamily: fontFamily ?? null,
-            alignment: alignment ?? null
+        await sequelize.transaction(async (t) => {
+            let startOrder;
+            if (targetRowId && position) {
+                const targetRow = await Row.findByPk(targetRowId, { transaction: t });
+                if (!targetRow) throw new AppError("Target row not found", 404);
+                
+                startOrder = position === 'above' ? targetRow.order : targetRow.order + 1;
+                
+                // Shift subsequent rows by quantity
+                await Row.increment('order', {
+                    by: quantity,
+                    where: {
+                        spreadsheetId,
+                        isDeleted: false,
+                        order: { [Op.gte]: startOrder }
+                    },
+                    transaction: t
+                });
+            } else {
+                const currentCount = await Row.count({ where: { spreadsheetId, isDeleted: false }, transaction: t });
+                startOrder = currentCount;
+            }
+
+            for (let i = 0; i < quantity; i++) {
+                const row = await Row.create({ 
+                    spreadsheetId, 
+                    order: startOrder + i, 
+                    rowColor, 
+                    height,
+                    isBold: isBold ?? false,
+                    isItalic: isItalic ?? false,
+                    isUnderline: isUnderline ?? false,
+                    isStrikethrough: isStrikethrough ?? false,
+                    fontFamily: fontFamily ?? null,
+                    alignment: alignment ?? null
+                }, { transaction: t });
+                createdRows.push(row);
+            }
         });
 
         const io = getIO();
-        if (io) io.to(`sheet:${spreadsheetId}`).emit("row_updated", { action: "added", sheetId: spreadsheetId, row: row.toJSON() });
+        if (io) {
+            createdRows.forEach(row => {
+                io.to(`sheet:${spreadsheetId}`).emit("row_updated", { action: "added", sheetId: spreadsheetId, row: row.toJSON() });
+            });
+        }
 
-        await logAction(req.user.id, "row", row.id, "create", null, { spreadsheetId }, req);
-        res.status(201).json({ data: row, message: "Row added" });
+        for (const row of createdRows) {
+            await logAction(req.user.id, "row", row.id, "create", null, { spreadsheetId }, req);
+        }
+
+        if (quantity === 1) {
+            res.status(201).json({ data: createdRows[0], message: "Row added" });
+        } else {
+            res.status(201).json({ data: createdRows, message: `${createdRows.length} rows added` });
+        }
     } catch (e) { next(e); }
 };
 
@@ -1541,18 +1560,24 @@ export const deleteSheet = async (req, res, next) => {
 };
 
 
-/**
- * Internal helper to duplicate a spreadsheet.
- */
 export async function copySheetInternal(originalSheetId, targetFolderId, newName, userId, transaction) {
     const original = await Spreadsheet.findOne({ where: { id: originalSheetId, isDeleted: false }, transaction });
     if (!original) throw new AppError("Spreadsheet not found", 404);
 
-    const sheetName = newName || `${original.name} (Copy)`;
-    const existing = await Spreadsheet.findOne({
+    let sheetName = newName || (original.isDetailedView ? original.name : `${original.name} (Copy)`);
+    let existing = await Spreadsheet.findOne({
         where: { name: sheetName, folderId: targetFolderId || null, isDeleted: false },
         transaction
     });
+
+    if (existing && original.isDetailedView) {
+        sheetName = `${sheetName}-${Date.now().toString().slice(-6)}`;
+        existing = await Spreadsheet.findOne({
+            where: { name: sheetName, folderId: targetFolderId || null, isDeleted: false },
+            transaction
+        });
+    }
+
     if (existing) throw new AppError(`A spreadsheet named '${sheetName}' already exists in this location`, 400);
 
     const newSheet = await Spreadsheet.create({
@@ -1582,8 +1607,8 @@ export async function copySheetInternal(originalSheetId, targetFolderId, newName
             isUnderline: col.isUnderline,
             isStrikethrough: col.isStrikethrough,
             fontFamily: col.fontFamily,
-            options: col.options,
-            validationRules: col.validationRules,
+            options: typeof col.options === 'string' ? (col.options ? JSON.parse(col.options) : []) : col.options,
+            validationRules: typeof col.validationRules === 'string' ? (col.validationRules ? JSON.parse(col.validationRules) : {}) : col.validationRules,
             formulaExpr: col.formulaExpr,
             currencyCode: col.currencyCode
         }, { transaction });
@@ -1606,26 +1631,40 @@ export async function copySheetInternal(originalSheetId, targetFolderId, newName
         }, { transaction });
 
         const cells = await Cell.findAll({ where: { rowId: row.id }, transaction });
-        const newCells = cells.map(cell => ({
-            rowId: newRow.id,
-            columnId: columnMap[cell.columnId]?.id,
-            rawValue: cell.rawValue,
-            formattedValue: cell.formattedValue,
-            computedValue: cell.computedValue,
-            bgColor: cell.bgColor,
-            isBold: cell.isBold,
-            isItalic: cell.isItalic,
-            isUnderline: cell.isUnderline,
-            isStrikethrough: cell.isStrikethrough,
-            fontFamily: cell.fontFamily,
-            alignment: cell.alignment,
-            currencyCode: cell.currencyCode,
-            fileUrl: cell.fileUrl,
-            updatedBy: userId
-        })).filter(c => c.columnId);
+        const newCells = [];
+        for (const cell of cells) {
+            let newNestedSheetId = null;
+            if (cell.nestedSheetId) {
+                try {
+                    const newNestedSheet = await copySheetInternal(cell.nestedSheetId, null, undefined, userId, transaction);
+                    newNestedSheetId = newNestedSheet.id;
+                } catch (err) {
+                    console.error(`Failed to duplicate nested sheet ${cell.nestedSheetId} for cell ${cell.id}:`, err);
+                }
+            }
+            newCells.push({
+                rowId: newRow.id,
+                columnId: columnMap[cell.columnId]?.id,
+                rawValue: cell.rawValue,
+                formattedValue: cell.formattedValue,
+                computedValue: cell.computedValue,
+                bgColor: cell.bgColor,
+                isBold: cell.isBold,
+                isItalic: cell.isItalic,
+                isUnderline: cell.isUnderline,
+                isStrikethrough: cell.isStrikethrough,
+                fontFamily: cell.fontFamily,
+                alignment: cell.alignment,
+                currencyCode: cell.currencyCode,
+                fileUrl: cell.fileUrl,
+                nestedSheetId: newNestedSheetId,
+                updatedBy: userId
+            });
+        }
 
-        if (newCells.length > 0) {
-            await Cell.bulkCreate(newCells, { transaction });
+        const validCells = newCells.filter(c => c.columnId);
+        if (validCells.length > 0) {
+            await Cell.bulkCreate(validCells, { transaction });
         }
     }
 
