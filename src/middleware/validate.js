@@ -36,6 +36,8 @@ export const schemas = {
         folderId: Joi.string().uuid().allow(null),
         settings: Joi.object().default({}),
         isDetailedView: Joi.boolean().default(false),
+        // parentSheetId: used when creating a CC sub-sheet; backend copies permissions from parent
+        parentSheetId: Joi.string().uuid().allow(null).optional(),
         columns: Joi.array().items(Joi.object({
             name: Joi.string().required(),
             type: Joi.string().required(),

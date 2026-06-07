@@ -3,6 +3,7 @@ import FolderPermission from "./folder_permission.model.js";
 import Spreadsheet from "./spreadsheet.model.js";
 import Column from "./column.model.js";
 import ColumnPermission from "./column_permission.model.js";
+import SheetPermission from "./permission.model.js";
 import User from "../user/user.model.js";
 import AppError from "../../utils/AppError.js";
 import { logAction } from "../../utils/auditLogger.js";
@@ -315,12 +316,44 @@ export const shareFolder = async (req, res, next) => {
             }
         }
 
+        // BUG #1 FIX: Grant SheetPermission for ALL sheets inside this folder (recursively)
+        // Without this, users with FolderPermission still get 403 when opening individual sheets.
+        const allFolderIds = [folderId];
+        const collectDescendantFolderIds = async (parentId) => {
+            const children = await Folder.findAll({ where: { parentId, isDeleted: false }, attributes: ["id"] });
+            for (const child of children) {
+                allFolderIds.push(child.id);
+                await collectDescendantFolderIds(child.id);
+            }
+        };
+        await collectDescendantFolderIds(folderId);
+
+        const sheetsInFolder = await Spreadsheet.findAll({
+            where: { folderId: { [Op.in]: allFolderIds }, isDeleted: false },
+            attributes: ["id"]
+        });
+
+        for (const sheet of sheetsInFolder) {
+            // Grant sheet-level permission so checkSheetPermission middleware passes
+            await SheetPermission.upsert({
+                userId: user.id,
+                spreadsheetId: sheet.id,
+                role,
+                canView,
+                canEdit,
+                canEditFormulas: false,
+                restrictedColumns: [],
+                invitedBy: req.user.id
+            });
+        }
+
         await logAction(req.user.id, "folder_permission", folderId, created ? "create" : "update", null,
             { userId: user.id, role, canView, canEdit, sheetColumnPermissions }, req, { folderId });
 
         res.status(created ? 201 : 200).json({ data: Array.isArray(perm) ? perm[0] : perm, message: "Folder shared" });
     } catch (e) { next(e); }
 };
+
 
 export const getNestedSheets = async (req, res, next) => {
     try {

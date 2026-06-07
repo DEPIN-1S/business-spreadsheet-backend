@@ -8,7 +8,8 @@ import {
     toggleColumnHidden, toggleColumnLocked,
     shareSheet, updateShareRole, removeShare, getSharedWithMe, setPermission, listPermissions,
     createSheet, getSheet, deleteSheet, duplicateSheet,
-    exportSheet, importSheet, copyRow, updateSheetSort, moveSharedItem
+    exportSheet, importSheet, copyRow, updateSheetSort, moveSharedItem,
+    selfRemoveShare
 } from "./spreadsheet.controller.js";
 import { protect } from "../../middleware/auth.js";
 import { checkSheetPermission } from "../../middleware/rbac.js";
@@ -56,6 +57,8 @@ router.post("/:id/share", checkSheetPermission("view"), validate(schemas.shareSh
 router.get("/:id/permissions", checkSheetPermission("view"), listPermissions);
 router.put("/:id/permissions/:userId", checkSheetPermission("view"), validate(schemas.updateShareRole), updateShareRole);
 router.delete("/:id/permissions/:userId", checkSheetPermission("view"), removeShare);
+// BUG #11 FIX: Self-unshare — shared user removes themselves from a sheet
+router.delete("/:id/share", protect(), selfRemoveShare);
 
 // Row management
 router.post("/:id/rows", checkSheetPermission("edit"), addRow);

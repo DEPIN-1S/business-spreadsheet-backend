@@ -76,29 +76,8 @@ export const getSheetData = async (req, res, next) => {
         // Column privacy and permission mapping
         let columnPermissionsMap = {}; // { colId: 'edit' | 'view' }
         if (role === "staff") {
-            // Check direct sheet permission
-            let sheetPerm = await SheetPermission.findOne({ where: { userId, spreadsheetId } });
-            
-            // Check if user is the owner (creator)
-            if (!sheetPerm && sheet.createdBy === userId) {
-                sheetPerm = {
-                    canView: true,
-                    canEdit: true,
-                    role: 'admin'
-                };
-            }
-
-            // Check inherited folder permission (recursively) if no direct/owner access
-            if (!sheetPerm && sheet.folderId) {
-                const folderPerm = await getInheritedPermission(userId, sheet.folderId);
-                if (folderPerm) {
-                    sheetPerm = {
-                        canView: true,
-                        canEdit: folderPerm.canEdit,
-                        role: folderPerm.canEdit ? "editor" : "viewer"
-                    };
-                }
-            }
+            // Use the permission already resolved by checkSheetPermission middleware
+            let sheetPerm = req.sheetPermission;
 
             const colPerm = await ColumnPermission.findOne({ where: { userId, spreadsheetId } });
             if (colPerm && colPerm.columnAccess) {
@@ -1165,7 +1144,7 @@ export const getSharedWithMe = async (req, res, next) => {
             include: [
                 {
                     model: Spreadsheet,
-                    where: { isDeleted: false },
+                    where: { isDeleted: false, isDetailedView: false },
                     include: [{ model: User, as: "creator", attributes: ["id", "name", "email", "role", "avatar"] }]
                 },
                 {
@@ -1201,7 +1180,8 @@ export const getSharedWithMe = async (req, res, next) => {
             where: {
                 createdBy: req.user.id,
                 folderId: (folderId === "root" || !folderId) ? null : folderId,
-                isDeleted: false
+                isDeleted: false,
+                isDetailedView: false
             },
             include: [{ model: User, as: "creator", attributes: ["id", "name", "email", "role", "avatar"] }]
         });
@@ -1212,9 +1192,14 @@ export const getSharedWithMe = async (req, res, next) => {
             isOwned: true
         }));
 
-        // Combine and handle pagination manually if needed, or just return both
-        // For simplicity, we'll combine them and return
-        const combinedFiles = [...sharedData, ...ownedData];
+        // BUG #7 FIX: Deduplicate by sheet id — shared + owned can return the same sheet
+        const allFilesMap = new Map();
+        // Shared items first (they carry the richer sharedBy info)
+        for (const f of sharedData) { allFilesMap.set(f.id, f); }
+        // Owned items only added if not already in map
+        for (const f of ownedData) { if (!allFilesMap.has(f.id)) allFilesMap.set(f.id, f); }
+        const combinedFiles = Array.from(allFilesMap.values());
+
         // Sort by date desc
         combinedFiles.sort((a, b) => new Date(b.sharedAt || b.createdAt) - new Date(a.sharedAt || a.createdAt));
 
@@ -1236,7 +1221,7 @@ export const getSharedWithMe = async (req, res, next) => {
                 files: combinedFiles.slice(offset, offset + limit),
                 folders: folders
             }, 
-            meta: getMeta(page, limit, sharedCount + ownedData.length) 
+            meta: getMeta(page, limit, combinedFiles.length) 
         });
     } catch (e) { next(e); }
 };
@@ -1298,13 +1283,39 @@ export const listPermissions = async (req, res, next) => {
     } catch (e) { next(e); }
 };
 
+// BUG #11 FIX: Self-remove share — allows a shared user to remove themselves
+// Frontend calls DELETE /sheets/{id}/share (no userId in path)
+export const selfRemoveShare = async (req, res, next) => {
+    try {
+        const { id: spreadsheetId } = req.params;
+        const userId = req.user.id;
+
+        const sheet = await Spreadsheet.findOne({ where: { id: spreadsheetId, isDeleted: false } });
+        if (!sheet) throw new AppError("Spreadsheet not found", 404);
+
+        // Prevent owners from removing themselves (they should delete the sheet instead)
+        if (sheet.createdBy === userId) {
+            throw new AppError("You are the owner. To remove access, delete the sheet instead.", 403);
+        }
+
+        const perm = await SheetPermission.findOne({ where: { spreadsheetId, userId } });
+        if (!perm) throw new AppError("No shared access found for this sheet", 404);
+
+        await perm.destroy();
+        await ColumnPermission.destroy({ where: { spreadsheetId, userId } });
+
+        await logAction(userId, "permission", spreadsheetId, "self_remove", null, null, req, { spreadsheetId });
+        res.json({ message: "Removed from shared view" });
+    } catch (e) { next(e); }
+};
+
 export const setPermission = shareSheet;
 
 // ── Spreadsheet & Column Management ──────────────────────────────────────────
 
 export const createSheet = async (req, res, next) => {
     try {
-        const { name, description, folderId, settings, isDetailedView, columns: initialColumns } = req.body;
+        const { name, description, folderId, settings, isDetailedView, columns: initialColumns, parentSheetId } = req.body;
         if (folderId) {
             const folder = await Folder.findOne({ where: { id: folderId, isDeleted: false } });
             if (!folder) throw new AppError("Folder not found", 404);
@@ -1369,8 +1380,30 @@ export const createSheet = async (req, res, next) => {
             await Column.bulkCreate(columnsToCreate, { transaction: t });
             const defaultRows = Array.from({ length: 10 }, (_, i) => ({ spreadsheetId: sheet.id, order: i }));
             await Row.bulkCreate(defaultRows, { transaction: t });
+
+            // BUG #1 FIX: If this CC sub-sheet has a parentSheetId, copy all permissions
+            // from the parent sheet so shared users can access it immediately.
+            if (parentSheetId) {
+                const parentPerms = await SheetPermission.findAll({ where: { spreadsheetId: parentSheetId }, transaction: t });
+                if (parentPerms.length > 0) {
+                    const permCopies = parentPerms.map(p => ({
+                        userId: p.userId,
+                        spreadsheetId: sheet.id,
+                        role: p.role,
+                        canView: p.canView,
+                        canEdit: p.canEdit,
+                        canEditFormulas: false,
+                        restrictedColumns: [],
+                        invitedBy: req.user.id
+                    }));
+                    await SheetPermission.bulkCreate(permCopies, {
+                        updateOnDuplicate: ['role', 'canView', 'canEdit', 'canEditFormulas', 'invitedBy'],
+                        transaction: t
+                    });
+                }
+            }
         });
-        await logAction(req.user.id, "sheet", sheet.id, "create", null, { name, folderId }, req, { spreadsheetId: sheet.id });
+        await logAction(req.user.id, "sheet", sheet.id, "create", null, { name, folderId, parentSheetId }, req, { spreadsheetId: sheet.id });
         res.status(201).json({ data: sheet, message: "Spreadsheet created" });
     } catch (e) { next(e); }
 };
