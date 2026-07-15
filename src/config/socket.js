@@ -10,23 +10,19 @@ let io = null;
 let redisClient = null;
 
 export function initSocket(httpServer) {
-    const allowedOrigins = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:5500",
-        "http://127.0.0.1:5500",
-        "https://datsheets.in",
-        "https://www.datsheets.in"
-    ];
-
     io = new Server(httpServer, {
         cors: {
-            origin: allowedOrigins,
-            methods: ["GET", "POST"]
+            origin: function (origin, callback) {
+                const envOrigins = (process.env.FRONTEND_URL || "").split(",").map(o => o.trim());
+                const isLocalhost = !origin || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+                if (isLocalhost || envOrigins.includes(origin) || envOrigins.includes("*")) {
+                    callback(null, true);
+                } else {
+                    callback(new Error("Not allowed by CORS"));
+                }
+            },
+            methods: ["GET", "POST"],
+            credentials: true
         },
         transports: ["websocket", "polling"]
     });
