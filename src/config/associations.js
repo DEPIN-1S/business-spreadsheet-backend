@@ -1,4 +1,6 @@
 // Central associations file – import this once in server.js before sync
+
+// ── EXISTING imports (untouched) ───────────────────────────────────────────────
 import User from "../features/user/user.model.js";
 import RefreshToken from "../features/user/refresh_token.model.js";
 import Spreadsheet from "../features/spreadsheet/spreadsheet.model.js";
@@ -16,6 +18,31 @@ import ChatMessage from "../features/chat/chatmessage.model.js";
 import DirectMessage from "../features/chat/direct_message.model.js";
 import AuditLog from "../features/audit/auditlog.model.js";
 import InventoryItem from "../features/inventory/inventory.model.js";
+
+// ── NEW: Inventory Sheet imports (separate tables) ─────────────────────────────
+import InvFolder from "../features/inv_sheet/inv_folder.model.js";
+import InvSpreadsheet from "../features/inv_sheet/inv_spreadsheet.model.js";
+import InvRow from "../features/inv_sheet/inv_row.model.js";
+import InvCell from "../features/inv_sheet/inv_cell.model.js";
+import InvCcRow from "../features/inv_sheet/inv_cc_row.model.js";
+import InvCcCell from "../features/inv_sheet/inv_cc_cell.model.js";
+import InvCcMeta from "../features/inv_sheet/inv_cc_meta.model.js";
+
+// ── NEW: Inventory Masters imports ─────────────────────────────────────────────
+import InvGstOption from "../features/inv_masters/inv_gst.model.js";
+import InvCategory from "../features/inv_masters/inv_category.model.js";
+import InvDivision from "../features/inv_masters/inv_division.model.js";
+import InvManufacturer from "../features/inv_masters/inv_manufacturer.model.js";
+import InvCompany from "../features/inv_masters/inv_company.model.js";
+import InvQuantityUnit from "../features/inv_masters/inv_quantity.model.js";
+
+// ── NEW: Inventory Billing imports ─────────────────────────────────────────────
+import RetailParty from "../features/inv_billing/retail_party.model.js";
+import WholesaleParty from "../features/inv_billing/wholesale_party.model.js";
+import Invoice from "../features/inv_billing/invoice.model.js";
+import InvoiceItem from "../features/inv_billing/invoice_item.model.js";
+import LedgerEntry from "../features/inv_billing/ledger.model.js";
+import InvNotification from "../features/inv_notifications/inv_notification.model.js";
 
 // ── User ─────────────────────────────────────────────────────────────────────
 User.hasMany(RefreshToken, { foreignKey: "userId", as: "refreshTokens", onDelete: "CASCADE" });
@@ -94,14 +121,57 @@ DirectMessage.belongsTo(User, { foreignKey: "receiverId", as: "receiver", constr
 User.hasMany(AuditLog, { foreignKey: "userId", as: "auditLogs" });
 AuditLog.belongsTo(User, { foreignKey: "userId", as: "user" });
 
-// ── Inventory ─────────────────────────────────────────────────────────────────
+// ── Inventory (old simple model — kept as-is) ─────────────────────────────────
 Spreadsheet.hasMany(InventoryItem, { foreignKey: "spreadsheetId", as: "inventoryItems" });
 InventoryItem.belongsTo(Spreadsheet, { foreignKey: "spreadsheetId" });
 
 // Creator associations (no FK enforcement to avoid circular issues)
 Spreadsheet.belongsTo(User, { foreignKey: "createdBy", as: "creator", constraints: false });
 
+// ── NEW: Inventory Sheet Associations ─────────────────────────────────────────
+// InvFolder self-referencing (parent-child folders)
+InvFolder.hasMany(InvFolder, { foreignKey: "parentId", as: "children" });
+InvFolder.belongsTo(InvFolder, { foreignKey: "parentId", as: "parent" });
+
+// InvSpreadsheet belongs to InvFolder
+InvFolder.hasMany(InvSpreadsheet, { foreignKey: "folderId", as: "sheets" });
+InvSpreadsheet.belongsTo(InvFolder, { foreignKey: "folderId", as: "folder" });
+
+// InvRow belongs to InvSpreadsheet
+InvSpreadsheet.hasMany(InvRow, { foreignKey: "spreadsheetId", as: "rows" });
+InvRow.belongsTo(InvSpreadsheet, { foreignKey: "spreadsheetId" });
+
+// InvCell belongs to InvRow
+InvRow.hasMany(InvCell, { foreignKey: "rowId", as: "cells" });
+InvCell.belongsTo(InvRow, { foreignKey: "rowId" });
+
+// InvCcMeta belongs to InvRow (one-to-one)
+InvRow.hasOne(InvCcMeta, { foreignKey: "rowId", as: "ccMeta" });
+InvCcMeta.belongsTo(InvRow, { foreignKey: "rowId" });
+
+// InvCcRow belongs to InvRow (parent product row)
+InvRow.hasMany(InvCcRow, { foreignKey: "parentRowId", as: "ccRows" });
+InvCcRow.belongsTo(InvRow, { foreignKey: "parentRowId" });
+
+// InvCcCell belongs to InvCcRow
+InvCcRow.hasMany(InvCcCell, { foreignKey: "ccRowId", as: "cells" });
+InvCcCell.belongsTo(InvCcRow, { foreignKey: "ccRowId" });
+
+// ── NEW: Billing Associations ─────────────────────────────────────────────────
+// Invoice → InvoiceItems
+Invoice.hasMany(InvoiceItem, { foreignKey: "invoiceId", as: "items" });
+InvoiceItem.belongsTo(Invoice, { foreignKey: "invoiceId" });
+
+// InvoiceItem → InvCcRow (batch linkage)
+InvoiceItem.belongsTo(InvCcRow, { foreignKey: "invCcRowId", as: "ccRow" });
+InvCcRow.hasMany(InvoiceItem, { foreignKey: "invCcRowId", as: "invoiceItems" });
+
+// Invoice → LedgerEntry
+Invoice.hasOne(LedgerEntry, { foreignKey: "invoiceId", as: "ledgerEntry" });
+LedgerEntry.belongsTo(Invoice, { foreignKey: "invoiceId" });
+
 export {
+    // Existing
     User, RefreshToken,
     Folder, FolderPermission,
     Spreadsheet, Column, Row, Cell,
@@ -109,5 +179,13 @@ export {
     Comment,
     MediaFile,
     ChatRoom, ChatMessage, DirectMessage,
-    AuditLog, InventoryItem
+    AuditLog, InventoryItem,
+    // Inventory Sheet (new)
+    InvFolder, InvSpreadsheet, InvRow, InvCell,
+    InvCcRow, InvCcCell, InvCcMeta,
+    // Inventory Masters (new)
+    InvGstOption, InvCategory, InvDivision,
+    InvManufacturer, InvCompany, InvQuantityUnit,
+    // Inventory Billing (new)
+    RetailParty, WholesaleParty, Invoice, InvoiceItem, LedgerEntry, InvNotification
 };

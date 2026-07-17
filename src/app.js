@@ -19,6 +19,11 @@ import chatRoutes from "./features/chat/chat.routes.js";
 import directMessageRoutes from "./features/chat/direct_message.routes.js";
 import auditRoutes from "./features/audit/audit.routes.js";
 import inventoryRoutes from "./features/inventory/inventory.routes.js";
+// ── NEW: Inventory module routes ────────────────────────────────────────────
+import { folderRouter as invFolderRouter, sheetRouter as invSheetRouter } from "./features/inv_sheet/inv_sheet.routes.js";
+import invMastersRouter from "./features/inv_masters/inv_masters.routes.js";
+import { partyRouter, invoiceRouter, ledgerRouter } from "./features/inv_billing/inv_billing.routes.js";
+import invNotificationRouter from "./features/inv_notifications/inv_notification.routes.js";
 
 const app = express();
 
@@ -44,13 +49,15 @@ app.use(cors({
 })); // force restart
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
-app.use(rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 500,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: "Too many requests, please try again later." }
-}));
+if (process.env.NODE_ENV === "production") {
+    app.use(rateLimit({
+        windowMs: 15 * 60 * 1000,
+        max: 500,
+        standardHeaders: true,
+        legacyHeaders: false,
+        message: { error: "Too many requests, please try again later." }
+    }));
+}
 
 // Auth endpoints: stricter rate limit
 app.use("/api/user/login", rateLimit({
@@ -88,6 +95,14 @@ app.use("/api/chat", chatRoutes);
 app.use("/api/dm", directMessageRoutes);
 app.use("/api/audit", auditRoutes);
 app.use("/api/inventory", inventoryRoutes);
+// ── NEW: Inventory module endpoints ──────────────────────────────────────────
+app.use("/api/inv-folders", invFolderRouter);
+app.use("/api/inv-sheets", invSheetRouter);
+app.use("/api/inv/masters", invMastersRouter);
+app.use("/api/inv/parties", partyRouter);
+app.use("/api/inv/invoices", invoiceRouter);
+app.use("/api/inv/ledger", ledgerRouter);
+app.use("/api/inv/notifications", invNotificationRouter);
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get("/health", (req, res) => res.json({ status: "ok", ts: new Date().toISOString() }));
