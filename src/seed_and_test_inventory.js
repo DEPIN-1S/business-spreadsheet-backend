@@ -3,7 +3,7 @@ import {
     InvFolder, InvSpreadsheet, InvRow, InvCell,
     InvCcRow, InvCcCell, InvCcMeta,
     InvGstOption, InvCategory, InvDivision,
-    InvManufacturer, InvCompany, InvQuantityUnit,
+    InvManufacturer, InvCompany, InvQuantityUnit, InvHsnCode,
     RetailParty, WholesaleParty, Invoice, InvoiceItem, LedgerEntry
 } from "./config/associations.js";
 
@@ -13,6 +13,9 @@ async function run() {
     try {
         await sequelize.authenticate();
         console.log("Database connected successfully.");
+
+        await sequelize.sync({ alter: true });
+        console.log("Database synced with alter.");
 
         // Clear existing inventory dummy data to avoid duplicates (optional, just safety)
         console.log("Cleaning old test data...");
@@ -25,7 +28,8 @@ async function run() {
 
         // 1. Seed Masters
         console.log("Seeding Master Dropdowns...");
-        const gstValues = ["GST 5%", "GST 12%", "GST 18%", "GST 28%"];
+        await InvGstOption.destroy({ where: {} }).catch(() => {});
+        const gstValues = ["GST 5%", "GST 18%"];
         for (const val of gstValues) {
             await InvGstOption.findOrCreate({ where: { value: val } });
         }
@@ -48,6 +52,10 @@ async function run() {
         const units = ["Strips of 10", "Strips of 15", "100ml Bottle", "Vial"];
         for (const unit of units) {
             await InvQuantityUnit.findOrCreate({ where: { name: unit } });
+        }
+        const hsnCodes = ["300450", "300490", "300410", "300420"];
+        for (const code of hsnCodes) {
+            await InvHsnCode.findOrCreate({ where: { name: code } });
         }
 
         // 2. Seed Folders & Spreadsheets
@@ -72,11 +80,9 @@ async function run() {
         const p1Cells = [
             { rowId: row1.id, columnId: "col-product-image", rawValue: "" },
             { rowId: row1.id, columnId: "col-product-name", rawValue: "Limcee Chewable Vitamin C" },
+            { rowId: row1.id, columnId: "col-retail-inventory", rawValue: "515" },
             { rowId: row1.id, columnId: "col-composition", rawValue: "Vitamin C 500mg" },
-            { rowId: row1.id, columnId: "col-company-name", rawValue: "Abbott India" },
-            { rowId: row1.id, columnId: "col-manufacturer", rawValue: "Abbott" },
-            { rowId: row1.id, columnId: "col-hsn-code", rawValue: "300450" },
-            { rowId: row1.id, columnId: "col-retail-inventory", rawValue: "5" }
+            { rowId: row1.id, columnId: "col-company-name", rawValue: "Abbott India" }
         ];
         await InvCell.bulkCreate(p1Cells);
 
@@ -87,26 +93,46 @@ async function run() {
             division: "Pediatric",
             manufacturer: "Abbott",
             companyName: "Abbott India",
-            quantity: "Strips of 15"
+            quantity: "Strips of 15",
+            hsnCode: "300450"
         });
 
         // Limcee Batches (CC Rows)
         const p1CcRow1 = await InvCcRow.create({ parentRowId: row1.id, orderIndex: 0 });
         const p1CcRow1Cells = [
             { ccRowId: p1CcRow1.id, columnId: "col-cc-batch", rawValue: "LM9900C" },
-            { ccRowId: p1CcRow1.id, columnId: "col-cc-quantity-stock", rawValue: "5" },
+            { ccRowId: p1CcRow1.id, columnId: "col-cc-quantity-stock", rawValue: "15" },
             { ccRowId: p1CcRow1.id, columnId: "col-cc-expiry-date", rawValue: "2029-06-10" },
             { ccRowId: p1CcRow1.id, columnId: "col-cc-purchase-rate", rawValue: "30.00" },
-            { ccRowId: p1CcRow1.id, columnId: "col-cc-retail-profit", rawValue: "10.00" },
+            { ccRowId: p1CcRow1.id, columnId: "col-cc-retail-profit", rawValue: "33.33" },
             { ccRowId: p1CcRow1.id, columnId: "col-cc-retail-selling-rate", rawValue: "40.00" },
-            { ccRowId: p1CcRow1.id, columnId: "col-cc-wholesale-profit", rawValue: "7.00" },
-            { ccRowId: p1CcRow1.id, columnId: "col-cc-wholesale-selling-rate", rawValue: "37.00" },
-            { ccRowId: p1CcRow1.id, columnId: "col-cc-discount", rawValue: "0" },
+            { ccRowId: p1CcRow1.id, columnId: "col-cc-discount", rawValue: "11.11" },
             { ccRowId: p1CcRow1.id, columnId: "col-cc-mrp", rawValue: "45.00" },
-            { ccRowId: p1CcRow1.id, columnId: "col-cc-status", rawValue: "Low Stock" },
-            { ccRowId: p1CcRow1.id, columnId: "col-cc-quantity-notified", rawValue: "20" }
+            { ccRowId: p1CcRow1.id, columnId: "col-cc-status", rawValue: "Stock Available" },
+            { ccRowId: p1CcRow1.id, columnId: "col-cc-quantity-notified", rawValue: "20" },
+            { ccRowId: p1CcRow1.id, columnId: "col-cc-wholesale-profit", rawValue: "23.33" },
+            { ccRowId: p1CcRow1.id, columnId: "col-cc-wholesale-selling-rate", rawValue: "37.00" },
+            { ccRowId: p1CcRow1.id, columnId: "col-cc-wholesale-margin", rawValue: "17.78" }
         ];
         await InvCcCell.bulkCreate(p1CcRow1Cells);
+
+        const p1CcRow2 = await InvCcRow.create({ parentRowId: row1.id, orderIndex: 1 });
+        const p1CcRow2Cells = [
+            { ccRowId: p1CcRow2.id, columnId: "col-cc-batch", rawValue: "LMF2026" },
+            { ccRowId: p1CcRow2.id, columnId: "col-cc-quantity-stock", rawValue: "500" },
+            { ccRowId: p1CcRow2.id, columnId: "col-cc-expiry-date", rawValue: "2027-07-16" },
+            { ccRowId: p1CcRow2.id, columnId: "col-cc-purchase-rate", rawValue: "25.00" },
+            { ccRowId: p1CcRow2.id, columnId: "col-cc-retail-profit", rawValue: "20.00" },
+            { ccRowId: p1CcRow2.id, columnId: "col-cc-retail-selling-rate", rawValue: "30.00" },
+            { ccRowId: p1CcRow2.id, columnId: "col-cc-discount", rawValue: "14.29" },
+            { ccRowId: p1CcRow2.id, columnId: "col-cc-mrp", rawValue: "35.00" },
+            { ccRowId: p1CcRow2.id, columnId: "col-cc-status", rawValue: "Stock Available" },
+            { ccRowId: p1CcRow2.id, columnId: "col-cc-quantity-notified", rawValue: "20" },
+            { ccRowId: p1CcRow2.id, columnId: "col-cc-wholesale-profit", rawValue: "12.00" },
+            { ccRowId: p1CcRow2.id, columnId: "col-cc-wholesale-selling-rate", rawValue: "28.00" },
+            { ccRowId: p1CcRow2.id, columnId: "col-cc-wholesale-margin", rawValue: "20.00" }
+        ];
+        await InvCcCell.bulkCreate(p1CcRow2Cells);
 
 
         // Product 2: Dolo
@@ -114,11 +140,9 @@ async function run() {
         const p2Cells = [
             { rowId: row2.id, columnId: "col-product-image", rawValue: "" },
             { rowId: row2.id, columnId: "col-product-name", rawValue: "Dolo 650mg Tablet" },
+            { rowId: row2.id, columnId: "col-retail-inventory", rawValue: "150" },
             { rowId: row2.id, columnId: "col-composition", rawValue: "Paracetamol 650mg" },
-            { rowId: row2.id, columnId: "col-company-name", rawValue: "Micro Labs Ltd" },
-            { rowId: row2.id, columnId: "col-manufacturer", rawValue: "Micro Labs" },
-            { rowId: row2.id, columnId: "col-hsn-code", rawValue: "300490" },
-            { rowId: row2.id, columnId: "col-retail-inventory", rawValue: "150" }
+            { rowId: row2.id, columnId: "col-company-name", rawValue: "Micro Labs Ltd" }
         ];
         await InvCell.bulkCreate(p2Cells);
 
@@ -129,7 +153,8 @@ async function run() {
             division: "General",
             manufacturer: "Micro Labs",
             companyName: "GSK Ltd",
-            quantity: "Strips of 15"
+            quantity: "Strips of 15",
+            hsnCode: "300490"
         });
 
         // Dolo Batches (CC Rows)
@@ -139,14 +164,15 @@ async function run() {
             { ccRowId: p2CcRow1.id, columnId: "col-cc-quantity-stock", rawValue: "150" },
             { ccRowId: p2CcRow1.id, columnId: "col-cc-expiry-date", rawValue: "2028-08-15" },
             { ccRowId: p2CcRow1.id, columnId: "col-cc-purchase-rate", rawValue: "25.00" },
-            { ccRowId: p2CcRow1.id, columnId: "col-cc-retail-profit", rawValue: "5.50" },
+            { ccRowId: p2CcRow1.id, columnId: "col-cc-retail-profit", rawValue: "22.00" },
             { ccRowId: p2CcRow1.id, columnId: "col-cc-retail-selling-rate", rawValue: "30.50" },
-            { ccRowId: p2CcRow1.id, columnId: "col-cc-wholesale-profit", rawValue: "3.50" },
-            { ccRowId: p2CcRow1.id, columnId: "col-cc-wholesale-selling-rate", rawValue: "28.50" },
-            { ccRowId: p2CcRow1.id, columnId: "col-cc-discount", rawValue: "0" },
+            { ccRowId: p2CcRow1.id, columnId: "col-cc-discount", rawValue: "12.86" },
             { ccRowId: p2CcRow1.id, columnId: "col-cc-mrp", rawValue: "35.00" },
             { ccRowId: p2CcRow1.id, columnId: "col-cc-status", rawValue: "Stock Available" },
-            { ccRowId: p2CcRow1.id, columnId: "col-cc-quantity-notified", rawValue: "20" }
+            { ccRowId: p2CcRow1.id, columnId: "col-cc-quantity-notified", rawValue: "20" },
+            { ccRowId: p2CcRow1.id, columnId: "col-cc-wholesale-profit", rawValue: "14.00" },
+            { ccRowId: p2CcRow1.id, columnId: "col-cc-wholesale-selling-rate", rawValue: "28.50" },
+            { ccRowId: p2CcRow1.id, columnId: "col-cc-wholesale-margin", rawValue: "18.57" }
         ];
         await InvCcCell.bulkCreate(p2CcRow1Cells);
 

@@ -14,7 +14,8 @@ const InvCcMeta = sequelize.define("InvCcMeta", {
     division: { type: DataTypes.STRING(100), allowNull: true, defaultValue: null },
     manufacturer: { type: DataTypes.STRING(100), allowNull: true, defaultValue: null }, // Mfg field
     companyName: { type: DataTypes.STRING(100), allowNull: true, defaultValue: null },   // Company field
-    quantity: { type: DataTypes.STRING(100), allowNull: true, defaultValue: null }
+    quantity: { type: DataTypes.STRING(100), allowNull: true, defaultValue: null },
+    hsnCode: { type: DataTypes.STRING(100), allowNull: true, defaultValue: null }
 }, { tableName: "inv_cc_meta" });
 
 export default InvCcMeta;

@@ -35,6 +35,7 @@ import InvDivision from "../features/inv_masters/inv_division.model.js";
 import InvManufacturer from "../features/inv_masters/inv_manufacturer.model.js";
 import InvCompany from "../features/inv_masters/inv_company.model.js";
 import InvQuantityUnit from "../features/inv_masters/inv_quantity.model.js";
+import InvHsnCode from "../features/inv_masters/inv_hsn.model.js";
 
 // ── NEW: Inventory Billing imports ─────────────────────────────────────────────
 import RetailParty from "../features/inv_billing/retail_party.model.js";
@@ -185,7 +186,7 @@ export {
     InvCcRow, InvCcCell, InvCcMeta,
     // Inventory Masters (new)
     InvGstOption, InvCategory, InvDivision,
-    InvManufacturer, InvCompany, InvQuantityUnit,
+    InvManufacturer, InvCompany, InvQuantityUnit, InvHsnCode,
     // Inventory Billing (new)
     RetailParty, WholesaleParty, Invoice, InvoiceItem, LedgerEntry, InvNotification
 };

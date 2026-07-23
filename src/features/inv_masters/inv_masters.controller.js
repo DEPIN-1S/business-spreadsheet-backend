@@ -4,6 +4,7 @@ import InvDivision from "./inv_division.model.js";
 import InvManufacturer from "./inv_manufacturer.model.js";
 import InvCompany from "./inv_company.model.js";
 import InvQuantityUnit from "./inv_quantity.model.js";
+import InvHsnCode from "./inv_hsn.model.js";
 import AppError from "../../utils/AppError.js";
 
 const MASTER_MAP = {
@@ -12,7 +13,8 @@ const MASTER_MAP = {
     divisions: { model: InvDivision, valueField: "name" },
     manufacturers: { model: InvManufacturer, valueField: "name" },
     companies: { model: InvCompany, valueField: "name" },
-    "quantity-units": { model: InvQuantityUnit, valueField: "name" }
+    "quantity-units": { model: InvQuantityUnit, valueField: "name" },
+    "hsn-codes": { model: InvHsnCode, valueField: "name" }
 };
 
 // GET /api/inv/masters/:type → list all active options
@@ -50,7 +52,10 @@ export const deleteMasterOption = async (req, res, next) => {
         const { type, id } = req.params;
         const entry = MASTER_MAP[type];
         if (!entry) throw new AppError(`Unknown master type: ${type}`, 400);
-        const item = await entry.model.findByPk(id);
+        let item = await entry.model.findByPk(id);
+        if (!item) {
+            item = await entry.model.findOne({ where: { [entry.valueField]: id } });
+        }
         if (!item) throw new AppError("Option not found", 404);
         await item.update({ isActive: false });
         res.json({ message: "Option removed" });

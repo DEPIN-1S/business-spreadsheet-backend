@@ -38,7 +38,7 @@ async function syncParentInventory(parentRowId, transaction) {
         transaction
     });
     if (mainInventoryCell) {
-        await mainInventoryCell.update({ rawValue: String(totalStock) }, { transaction });
+        await mainInventoryCell.update({ rawValue: String(totalStock), computedValue: String(totalStock) }, { transaction });
     }
 }
 
@@ -198,8 +198,8 @@ export const createSheet = async (req, res, next) => {
         });
         // Pre-create 5 empty rows with cells for the new sheet
         const defaultColIds = [
-            "col-product-image", "col-product-name", "col-composition",
-            "col-company-name", "col-manufacturer", "col-hsn-code", "col-retail-inventory"
+            "col-product-image", "col-product-name", "col-retail-inventory",
+            "col-composition", "col-company-name"
         ];
         for (let i = 0; i < 5; i++) {
             const row = await InvRow.create({ spreadsheetId: sheet.id, orderIndex: i });
@@ -230,7 +230,30 @@ export const getSheet = async (req, res, next) => {
                 [{ model: InvRow, as: "rows" }, "orderIndex", "ASC"]
             ]
         });
-        if (!sheet) throw new AppError("Sheet not found", 404);
+        if (sheet) {
+            const rows = sheet.rows || [];
+            for (const r of rows) {
+                await syncParentInventory(r.id);
+            }
+            // Re-fetch sheet after sync
+            const updatedSheet = await InvSpreadsheet.findOne({
+                where: { id: req.params.id, isDeleted: false },
+                include: [{
+                    model: InvRow,
+                    as: "rows",
+                    where: { isDeleted: false },
+                    required: false,
+                    include: [
+                        { model: InvCell, as: "cells" },
+                        { model: InvCcMeta, as: "ccMeta", required: false }
+                    ]
+                }],
+                order: [
+                    [{ model: InvRow, as: "rows" }, "orderIndex", "ASC"]
+                ]
+            });
+            return res.json({ data: updatedSheet || sheet });
+        }
         res.json({ data: sheet });
     } catch (e) { next(e); }
 };
@@ -269,8 +292,8 @@ export const addRow = async (req, res, next) => {
         const maxOrder = await InvRow.max("orderIndex", { where: { spreadsheetId: req.params.id } }) || 0;
         const row = await InvRow.create({ spreadsheetId: req.params.id, orderIndex: maxOrder + 1 });
         const defaultColIds = [
-            "col-product-image", "col-product-name", "col-composition",
-            "col-company-name", "col-manufacturer", "col-hsn-code", "col-retail-inventory"
+            "col-product-image", "col-product-name", "col-retail-inventory",
+            "col-composition", "col-company-name"
         ];
         const cells = defaultColIds.map(columnId => ({
             rowId: row.id, columnId, rawValue: "", computedValue: ""
@@ -316,7 +339,7 @@ export const getCcMeta = async (req, res, next) => {
         const row = await InvRow.findOne({ where: { id: req.params.rowId, isDeleted: false } });
         if (!row) throw new AppError("Row not found", 404);
         const meta = await InvCcMeta.findOne({ where: { rowId: req.params.rowId } });
-        res.json({ data: meta || { rowId: req.params.rowId, gst: "", category: "", division: "", manufacturer: "", companyName: "", quantity: "" } });
+        res.json({ data: meta || { rowId: req.params.rowId, gst: "", category: "", division: "", manufacturer: "", companyName: "", quantity: "", hsnCode: "" } });
     } catch (e) { next(e); }
 };
 
@@ -324,7 +347,7 @@ export const updateCcMeta = async (req, res, next) => {
     try {
         const row = await InvRow.findOne({ where: { id: req.params.rowId, isDeleted: false } });
         if (!row) throw new AppError("Row not found", 404);
-        const { gst, category, division, manufacturer, companyName, quantity } = req.body;
+        const { gst, category, division, manufacturer, companyName, quantity, hsnCode } = req.body;
         const [meta] = await InvCcMeta.upsert({
             rowId: req.params.rowId,
             ...(gst !== undefined ? { gst } : {}),
@@ -332,7 +355,8 @@ export const updateCcMeta = async (req, res, next) => {
             ...(division !== undefined ? { division } : {}),
             ...(manufacturer !== undefined ? { manufacturer } : {}),
             ...(companyName !== undefined ? { companyName } : {}),
-            ...(quantity !== undefined ? { quantity } : {})
+            ...(quantity !== undefined ? { quantity } : {}),
+            ...(hsnCode !== undefined ? { hsnCode } : {})
         });
         res.json({ data: meta, message: "Meta updated" });
     } catch (e) { next(e); }
@@ -362,8 +386,8 @@ export const addCcRow = async (req, res, next) => {
         const defaultCcColIds = [
             "col-cc-batch", "col-cc-quantity-stock", "col-cc-expiry-date",
             "col-cc-purchase-rate", "col-cc-retail-profit", "col-cc-retail-selling-rate",
-            "col-cc-wholesale-profit", "col-cc-wholesale-selling-rate",
-            "col-cc-discount", "col-cc-mrp", "col-cc-status", "col-cc-quantity-notified"
+            "col-cc-discount", "col-cc-mrp", "col-cc-status", "col-cc-quantity-notified",
+            "col-cc-wholesale-profit", "col-cc-wholesale-selling-rate", "col-cc-wholesale-margin"
         ];
         const cells = defaultCcColIds.map(columnId => ({
             ccRowId: ccRow.id, columnId, rawValue: "", computedValue: ""

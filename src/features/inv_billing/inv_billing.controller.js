@@ -156,9 +156,30 @@ export const listParties = async (req, res, next) => {
 export const createParty = async (req, res, next) => {
     try {
         const Model = getPartyModel(req.params.type);
-        const { name, contact, email, address, registrationNo } = req.body;
+        const { name, contact, email, address, registrationNo, dlNo, gstinNo, panNo, dobYear, age } = req.body;
         if (!name?.trim()) throw new AppError("Party name is required", 422);
-        const party = await Model.create({ name: name.trim(), contact, email, address, registrationNo });
+
+        const parts = [];
+        if (dlNo?.trim()) parts.push(`DL: ${dlNo.trim()}`);
+        if (gstinNo?.trim()) parts.push(`GSTIN: ${gstinNo.trim()}`);
+        if (panNo?.trim()) parts.push(`PAN: ${panNo.trim()}`);
+        const computedRegNo = parts.length > 0 ? parts.join(', ') : registrationNo;
+
+        const currentYear = new Date().getFullYear();
+        const computedAge = dobYear && !isNaN(Number(dobYear)) && Number(dobYear) > 1900 ? (currentYear - Number(dobYear) + 1) : (age || null);
+
+        const party = await Model.create({
+            name: name.trim(),
+            contact,
+            email,
+            address,
+            registrationNo: computedRegNo,
+            dlNo,
+            gstinNo,
+            panNo,
+            dobYear: dobYear ? Number(dobYear) : null,
+            age: computedAge
+        });
         res.status(201).json({ data: party, message: "Party created" });
     } catch (e) { next(e); }
 };
