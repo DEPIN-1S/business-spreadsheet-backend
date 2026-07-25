@@ -55,9 +55,9 @@ async function autoUpdateBatchStatus(ccRowId, currentQty, transaction) {
             const productName = getVal(parentCells, "col-product-name") || "Unknown Product";
             const batchName = getVal(cells, "col-cc-batch") || "Unknown Batch";
             const type = status === "Out of Stock" ? "out_of_stock" : "low_stock";
-            const title = status === "Out of Stock" ? `Out of Stock: ${productName}` : `Low Stock: ${productName}`;
+            const title = status === "Out of Stock" ? `Out of Stock (0 Left): ${productName}` : `Low Stock (${currentQty} Left): ${productName}`;
             const message = status === "Out of Stock"
-                ? `Batch "${batchName}" is completely out of stock.`
+                ? `Batch "${batchName}" is completely out of stock (0 units remaining).`
                 : `Batch "${batchName}" has reached low stock level. Current quantity: ${currentQty} (Threshold: ${notifiedQty}).`;
 
             const existing = await InvNotification.findOne({

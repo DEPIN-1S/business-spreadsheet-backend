@@ -44,38 +44,7 @@ export const checkInventoryAlerts = async () => {
             const notifiedQty = notifiedStr === "" ? 0 : parseFloat(notifiedStr);
             const expiryStr = getCellValue(cells, "col-cc-expiry-date");
 
-            // 1. Expiry Check
-            if (expiryStr && qty > 0) {
-                const expiryDate = new Date(expiryStr);
-                if (!isNaN(expiryDate.getTime()) && expiryDate <= alertThresholdDate) {
-                    // Check if unread notification already exists
-                    const existing = await InvNotification.findOne({
-                        where: {
-                            invCcRowId: batch.id,
-                            type: "expiry_alert",
-                            isRead: false,
-                            isDismissed: false
-                        }
-                    });
-                    if (!existing) {
-                        const daysLeft = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
-                        const title = `Expiry Alert: ${productName}`;
-                        const message = `Batch "${batchName}" is expiring in ${daysLeft} days (Expiry: ${expiryStr}).`;
-                        await InvNotification.create({
-                            type: "expiry_alert",
-                            title,
-                            message,
-                            invCcRowId: batch.id,
-                            invRowId: parentRow ? parentRow.id : null,
-                            productName,
-                            batchName,
-                            currentQty: qty,
-                            expiryDate: expiryStr
-                        });
-                        sendStockAlertEmail({ type: "expiry_alert", title, message, productName, batchName, currentQty: qty, expiryDate: expiryStr }).catch(err => console.error("[Cron Email Error]", err));
-                    }
-                }
-            }
+            // 1. Expiry Check (Disabled per user request: only stock alerts are tracked)
 
             // 2. Stock checks
             if (qty <= 0) {
@@ -89,8 +58,8 @@ export const checkInventoryAlerts = async () => {
                     }
                 });
                 if (!existing) {
-                    const title = `Out of Stock: ${productName}`;
-                    const message = `Batch "${batchName}" is completely out of stock.`;
+                    const title = `Out of Stock (0 Left): ${productName}`;
+                    const message = `Batch "${batchName}" is completely out of stock (0 units remaining).`;
                     await InvNotification.create({
                         type: "out_of_stock",
                         title,
@@ -99,9 +68,9 @@ export const checkInventoryAlerts = async () => {
                         invRowId: parentRow ? parentRow.id : null,
                         productName,
                         batchName,
-                        currentQty: qty
+                        currentQty: 0
                     });
-                    sendStockAlertEmail({ type: "out_of_stock", title, message, productName, batchName, currentQty: qty }).catch(err => console.error("[Cron Email Error]", err));
+                    sendStockAlertEmail({ type: "out_of_stock", title, message, productName, batchName, currentQty: 0 }).catch(err => console.error("[Cron Email Error]", err));
                 }
             } else if (qty < notifiedQty) {
                 // Low stock
@@ -114,7 +83,7 @@ export const checkInventoryAlerts = async () => {
                     }
                 });
                 if (!existing) {
-                    const title = `Low Stock: ${productName}`;
+                    const title = `Low Stock (${qty} Left): ${productName}`;
                     const message = `Batch "${batchName}" has reached low stock level. Current quantity: ${qty} (Threshold: ${notifiedQty}).`;
                     await InvNotification.create({
                         type: "low_stock",
