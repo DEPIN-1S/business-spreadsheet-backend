@@ -163,24 +163,26 @@ export const createParty = async (req, res, next) => {
         if (dlNo?.trim()) parts.push(`DL: ${dlNo.trim()}`);
         if (gstinNo?.trim()) parts.push(`GSTIN: ${gstinNo.trim()}`);
         if (panNo?.trim()) parts.push(`PAN: ${panNo.trim()}`);
-        const computedRegNo = parts.length > 0 ? parts.join(', ') : registrationNo;
+        const computedRegNo = parts.length > 0 ? parts.join(', ') : (registrationNo || null);
 
         const currentYear = new Date().getFullYear();
-        const computedAge = dobYear && !isNaN(Number(dobYear)) && Number(dobYear) > 1900 ? (currentYear - Number(dobYear) + 1) : (age || null);
+        const computedAge = dobYear && !isNaN(Number(dobYear)) && Number(dobYear) > 1900
+            ? (currentYear - Number(dobYear) + 1)
+            : (age ? Number(age) : null);
 
         const party = await Model.create({
             name: name.trim(),
-            contact,
-            email,
-            address,
+            contact: contact ? String(contact).trim() : null,
+            email: email ? String(email).trim() : null,
+            address: address ? String(address).trim() : null,
             registrationNo: computedRegNo,
-            dlNo,
-            gstinNo,
-            panNo,
+            dlNo: dlNo ? String(dlNo).trim() : null,
+            gstinNo: gstinNo ? String(gstinNo).trim() : null,
+            panNo: panNo ? String(panNo).trim() : null,
             dobYear: dobYear ? Number(dobYear) : null,
             age: computedAge
         });
-        res.status(201).json({ data: party, message: "Party created" });
+        res.status(201).json({ data: party, message: "Party created successfully" });
     } catch (e) { next(e); }
 };
 
@@ -189,8 +191,39 @@ export const updateParty = async (req, res, next) => {
         const Model = getPartyModel(req.params.type);
         const party = await Model.findOne({ where: { id: req.params.id, isDeleted: false } });
         if (!party) throw new AppError("Party not found", 404);
-        await party.update(req.body);
-        res.json({ data: party, message: "Party updated" });
+
+        const { name, contact, email, address, registrationNo, dlNo, gstinNo, panNo, dobYear, age } = req.body;
+        if (name !== undefined && !name?.trim()) throw new AppError("Party name is required", 422);
+
+        const parts = [];
+        const finalDlNo = dlNo !== undefined ? dlNo : party.dlNo;
+        const finalGstinNo = gstinNo !== undefined ? gstinNo : party.gstinNo;
+        const finalPanNo = panNo !== undefined ? panNo : party.panNo;
+        if (finalDlNo?.trim()) parts.push(`DL: ${finalDlNo.trim()}`);
+        if (finalGstinNo?.trim()) parts.push(`GSTIN: ${finalGstinNo.trim()}`);
+        if (finalPanNo?.trim()) parts.push(`PAN: ${finalPanNo.trim()}`);
+        const computedRegNo = parts.length > 0 ? parts.join(', ') : (registrationNo || party.registrationNo);
+
+        const currentYear = new Date().getFullYear();
+        const finalDobYear = dobYear !== undefined ? dobYear : party.dobYear;
+        const finalAge = age !== undefined ? age : party.age;
+        const computedAge = finalDobYear && !isNaN(Number(finalDobYear)) && Number(finalDobYear) > 1900
+            ? (currentYear - Number(finalDobYear) + 1)
+            : (finalAge ? Number(finalAge) : null);
+
+        await party.update({
+            ...(name !== undefined && { name: name.trim() }),
+            ...(contact !== undefined && { contact: contact ? String(contact).trim() : null }),
+            ...(email !== undefined && { email: email ? String(email).trim() : null }),
+            ...(address !== undefined && { address: address ? String(address).trim() : null }),
+            registrationNo: computedRegNo || null,
+            ...(dlNo !== undefined && { dlNo: dlNo ? String(dlNo).trim() : null }),
+            ...(gstinNo !== undefined && { gstinNo: gstinNo ? String(gstinNo).trim() : null }),
+            ...(panNo !== undefined && { panNo: panNo ? String(panNo).trim() : null }),
+            ...(dobYear !== undefined && { dobYear: dobYear ? Number(dobYear) : null }),
+            age: computedAge
+        });
+        res.json({ data: party, message: "Party updated successfully" });
     } catch (e) { next(e); }
 };
 
