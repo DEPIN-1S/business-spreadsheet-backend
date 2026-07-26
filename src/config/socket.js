@@ -13,9 +13,11 @@ export function initSocket(httpServer) {
     io = new Server(httpServer, {
         cors: {
             origin: function (origin, callback) {
-                const envOrigins = (process.env.FRONTEND_URL || "").split(",").map(o => o.trim());
-                const isLocalhost = !origin || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-                if (isLocalhost || envOrigins.includes(origin) || envOrigins.includes("*")) {
+                if (!origin) return callback(null, true);
+                const envOrigins = (process.env.FRONTEND_URL || "").split(",").map(o => o.trim()).filter(Boolean);
+                const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+                const isDatsheets = /^https?:\/\/(.+\.)?datsheets\.in$/i.test(origin);
+                if (isLocalhost || isDatsheets || envOrigins.includes(origin) || envOrigins.includes("*")) {
                     callback(null, true);
                 } else {
                     callback(new Error("Not allowed by CORS"));

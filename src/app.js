@@ -35,11 +35,13 @@ app.set("trust proxy", 1);
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(cors({
     origin: function (origin, callback) {
-        const allowedOrigins = (process.env.FRONTEND_URL || "").split(",").map(o => o.trim());
-        const isLocalhost = !origin || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-        // allow requests with no origin (like mobile apps or curl), localhost/127.0.0.1, 
-        // or if it's in the allowed list
-        if (isLocalhost || allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
+        if (!origin) return callback(null, true);
+
+        const allowedOrigins = (process.env.FRONTEND_URL || "").split(",").map(o => o.trim()).filter(Boolean);
+        const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+        const isDatsheets = /^https?:\/\/(.+\.)?datsheets\.in$/i.test(origin);
+
+        if (isLocalhost || isDatsheets || allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
             callback(null, true);
         } else {
             console.error(`Blocked by CORS: origin='${origin}'`);
@@ -47,7 +49,7 @@ app.use(cors({
         }
     },
     credentials: true
-})); // force restart
+}));
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
 if (process.env.NODE_ENV === "production") {
