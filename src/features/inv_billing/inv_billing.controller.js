@@ -148,7 +148,11 @@ const getPartyModel = (type) => {
 export const listParties = async (req, res, next) => {
     try {
         const Model = getPartyModel(req.params.type);
-        const parties = await Model.findAll({ where: { isDeleted: false }, order: [["name", "ASC"]] });
+        const where = { isDeleted: false };
+        if (req.user && req.user.role === 'admin') {
+            where.createdBy = req.user.id;
+        }
+        const parties = await Model.findAll({ where, order: [["name", "ASC"]] });
         res.json({ data: parties });
     } catch (e) { next(e); }
 };
@@ -180,7 +184,8 @@ export const createParty = async (req, res, next) => {
             gstinNo: gstinNo ? String(gstinNo).trim() : null,
             panNo: panNo ? String(panNo).trim() : null,
             dobYear: dobYear ? Number(dobYear) : null,
-            age: computedAge
+            age: computedAge,
+            createdBy: req.user?.id || null
         });
         res.status(201).json({ data: party, message: "Party created successfully" });
     } catch (e) { next(e); }
@@ -255,6 +260,9 @@ export const listInvoices = async (req, res, next) => {
         if (req.query.type && ["retail", "wholesale"].includes(req.query.type)) {
             where.type = req.query.type;
         }
+        if (req.user && req.user.role === 'admin') {
+            where.createdBy = req.user.id;
+        }
         const invoices = await Invoice.findAll({
             where,
             include: [{ model: InvoiceItem, as: "items", where: { isDeleted: false }, required: false }],
@@ -318,7 +326,8 @@ export const createInvoice = async (req, res, next) => {
                 phone: "",
                 date: invoiceDate,
                 pendingAmount: pendingAmount || grandTotal || 0,
-                status: paymentStatus === "Partially Paid" ? "Partially Paid" : "Pending"
+                status: paymentStatus === "Partially Paid" ? "Partially Paid" : "Pending",
+                createdBy: req.user?.id || null
             }, { transaction: t });
         }
 
@@ -493,6 +502,9 @@ export const listLedger = async (req, res, next) => {
     try {
         const where = { isDeleted: false };
         if (req.query.type) where.type = req.query.type;
+        if (req.user && req.user.role === 'admin') {
+            where.createdBy = req.user.id;
+        }
         const entries = await LedgerEntry.findAll({ where, order: [["createdAt", "DESC"]] });
         res.json({ data: entries });
     } catch (e) { next(e); }

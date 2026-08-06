@@ -193,50 +193,48 @@ export const deleteFolder = async (req, res, next) => {
 export const getFolderTree = async (req, res, next) => {
     try {
         const { role, id: userId } = req.user;
-        let allowedIds = null;
-        
-        if (role === "staff") {
-            const perms = await FolderPermission.findAll({ where: { userId, canView: true }, attributes: ["folderId"] });
-            allowedIds = perms.map(p => p.folderId);
-            
-            // For staff, we find all folders they can access
-            const accessibleFolders = await Folder.findAll({
-                where: {
-                    isDeleted: false,
-                    [Op.or]: [
-                        { createdBy: userId },
-                        { id: { [Op.in]: allowedIds } }
-                    ]
-                }
+
+        if (role === "superadmin") {
+            // Superadmin sees all folders created by any superadmin account
+            const superAdminUsers = await User.findAll({
+                where: { role: "superadmin" },
+                attributes: ["id"]
             });
-
-            // A folder is a "root" for this user if its parent is NOT accessible to them
-            const rootFolders = accessibleFolders.filter(folder => {
-                if (!folder.parentId) return true;
-                return !accessibleFolders.some(f => f.id === folder.parentId);
-            });
-
-            const tree = await Promise.all(rootFolders.map(async (root) => {
-                const children = await buildTree(root.id, userId, role, allowedIds, true);
-                const sheets = await Spreadsheet.findAll({
-                    where: { folderId: root.id, isDeleted: false },
-                    attributes: ["id", "name", "createdAt"]
-                });
-                return { ...root.toJSON(), children, sheets };
-            }));
-
+            const superAdminUserIds = superAdminUsers.map(u => u.id);
+            const tree = await buildTree(null, superAdminUserIds, role, null, false, true);
             return res.json({ data: tree });
         }
 
-        // For admin/superadmin, show folders created by any admin/superadmin (not staff or normal users)
-        const adminUsers = await User.findAll({
-            where: { role: ["superadmin", "admin"] },
-            attributes: ["id"]
+        // Show owned folders + explicitly shared folders for admin and staff roles
+        const perms = await FolderPermission.findAll({ where: { userId, canView: true }, attributes: ["folderId"] });
+        const allowedIds = perms.map(p => p.folderId);
+        
+        const accessibleFolders = await Folder.findAll({
+            where: {
+                isDeleted: false,
+                [Op.or]: [
+                    { createdBy: userId },
+                    { id: { [Op.in]: allowedIds } }
+                ]
+            }
         });
-        const ownerOnlyIds = adminUsers.map(u => u.id);
 
-        const tree = await buildTree(null, ownerOnlyIds, role, allowedIds, false, true);
-        res.json({ data: tree });
+        // A folder is a "root" for this user if its parent is NOT accessible to them
+        const rootFolders = accessibleFolders.filter(folder => {
+            if (!folder.parentId) return true;
+            return !accessibleFolders.some(f => f.id === folder.parentId);
+        });
+
+        const tree = await Promise.all(rootFolders.map(async (root) => {
+            const children = await buildTree(root.id, userId, role, allowedIds, true);
+            const sheets = await Spreadsheet.findAll({
+                where: { folderId: root.id, isDeleted: false },
+                attributes: ["id", "name", "createdAt"]
+            });
+            return { ...root.toJSON(), children, sheets };
+        }));
+
+        return res.json({ data: tree });
     } catch (e) { next(e); }
 };
 

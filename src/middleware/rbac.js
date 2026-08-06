@@ -33,8 +33,8 @@ export async function getInheritedPermission(userId, folderId) {
 export const checkSheetPermission = (action = "view") => async (req, res, next) => {
     try {
         const { role, id: userId } = req.user;
-        // Admins and superadmins always have full access
-        if (role === "admin" || role === "superadmin") return next();
+        // Only superadmin bypasses all permission checks
+        if (role === "superadmin") return next();
 
         const sheetId = req.params.id || req.params.sheetId;
         if (!sheetId) throw new AppError("Sheet ID missing", 400);
@@ -43,8 +43,8 @@ export const checkSheetPermission = (action = "view") => async (req, res, next) 
         
         if (perm) {
             logger.info(`[DEBUG] Found direct SheetPermission for userId=${userId}, sheetId=${sheetId}`);
-        } else if (role === "staff") {
-            logger.info(`[DEBUG] No direct SheetPermission, checking owner/inheritance for staff user=${userId}, sheetId=${sheetId}`);
+        } else if (role === "staff" || role === "admin") {
+            logger.info(`[DEBUG] No direct SheetPermission, checking owner/inheritance for user=${userId} (role=${role}), sheetId=${sheetId}`);
             
             // Fetch sheet to check owner (createdBy), folderId, and isDetailedView
             const sheet = await Spreadsheet.findOne({ where: { id: sheetId, isDeleted: false }, attributes: ["id", "folderId", "createdBy", "isDetailedView"] });
@@ -152,7 +152,7 @@ export const checkSheetPermission = (action = "view") => async (req, res, next) 
 export const attachSheetPermission = async (req, res, next) => {
     try {
         const { role, id: userId } = req.user;
-        if (role === "admin" || role === "superadmin") {
+        if (role === "superadmin") {
             req.sheetPermission = null; // signals full access
             return next();
         }

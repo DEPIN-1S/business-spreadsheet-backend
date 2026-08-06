@@ -14,6 +14,7 @@ const LedgerEntry = sequelize.define("LedgerEntry", {
         type: DataTypes.ENUM("Pending", "Settled", "Partially Paid"),
         defaultValue: "Pending"
     },
+    createdBy: { type: DataTypes.UUID, allowNull: true },
     isDeleted: { type: DataTypes.BOOLEAN, defaultValue: false }
 }, { tableName: "ledger_entries" });
 

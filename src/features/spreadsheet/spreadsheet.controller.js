@@ -75,7 +75,7 @@ export const getSheetData = async (req, res, next) => {
 
         // Column privacy and permission mapping
         let columnPermissionsMap = {}; // { colId: 'edit' | 'view' }
-        if (role === "staff") {
+        if (role === "staff" || role === "admin") {
             // Use the permission already resolved by checkSheetPermission middleware
             let sheetPerm = req.sheetPermission;
 
@@ -94,7 +94,7 @@ export const getSheetData = async (req, res, next) => {
                 columns = [];
             }
         } else {
-            // Admin/SuperAdmin see all and can edit all
+            // SuperAdmin see all and can edit all
             columns.forEach(c => { columnPermissionsMap[c.id] = 'edit'; });
         }
 
@@ -200,7 +200,7 @@ export const getSheetData = async (req, res, next) => {
             data: { 
                 sheet: {
                     ...sheet.toJSON(),
-                    userPermission: (role === 'admin' || role === 'superadmin') ? 'admin' : (req.sheetPermission?.role || 'viewer')
+                    userPermission: (role === 'superadmin') ? 'admin' : (req.sheetPermission?.role || 'viewer')
                 }, 
                 columns, 
                 grid 
@@ -882,16 +882,16 @@ export const listSheets = async (req, res, next) => {
             const sharedIds = perms.map(p => p.spreadsheetId);
             whereSpreadsheet.id = sharedIds;
             whereSpreadsheet.createdBy = { [Op.ne]: userId }; // Exclude owned
-        } else if (role === "superadmin" || role === "admin") {
-            // For admin/superadmin in "My Files", show sheets created by any admin/superadmin
-            const adminUsers = await User.findAll({
-                where: { role: ["superadmin", "admin"] },
+        } else if (role === "superadmin") {
+            // For superadmin in "My Files", show sheets created by superadmins
+            const superAdminUsers = await User.findAll({
+                where: { role: "superadmin" },
                 attributes: ["id"]
             });
-            const adminUserIds = adminUsers.map(u => u.id);
-            whereSpreadsheet.createdBy = { [Op.in]: adminUserIds };
+            const superAdminUserIds = superAdminUsers.map(u => u.id);
+            whereSpreadsheet.createdBy = { [Op.in]: superAdminUserIds };
         } else {
-            // For staff users, include:
+            // For admin & staff users, include:
             // 1. Sheets they created
             // 2. Sheets shared with them directly
             // 3. Sheets in folders shared with them

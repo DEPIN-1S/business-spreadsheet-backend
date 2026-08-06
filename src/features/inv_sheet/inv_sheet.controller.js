@@ -132,6 +132,9 @@ export const listFolders = async (req, res, next) => {
         if (req.query.parentId !== undefined) {
             where.parentId = req.query.parentId === "null" ? null : req.query.parentId;
         }
+        if (req.user && req.user.role === 'admin') {
+            where.createdBy = req.user.id;
+        }
         const folders = await InvFolder.findAll({ where, order: [["title", "ASC"]] });
         res.json({ data: folders });
     } catch (e) { next(e); }
@@ -178,6 +181,9 @@ export const listSheets = async (req, res, next) => {
         const where = { isDeleted: false };
         if (req.query.folderId !== undefined) {
             where.folderId = req.query.folderId === "null" ? null : req.query.folderId;
+        }
+        if (req.user && req.user.role === 'admin') {
+            where.createdBy = req.user.id;
         }
         const sheets = await InvSpreadsheet.findAll({ where, order: [["createdAt", "DESC"]] });
         res.json({ data: sheets });
@@ -418,6 +424,79 @@ export const deleteCcRow = async (req, res, next) => {
     }
 };
 
+export const copyCcRow = async (req, res, next) => {
+    const t = await sequelize.transaction();
+    try {
+        const { rowId, ccRowId } = req.params;
+        const originalCcRow = await InvCcRow.findOne({
+            where: { id: ccRowId, parentRowId: rowId, isDeleted: false },
+            transaction: t
+        });
+        if (!originalCcRow) throw new AppError("Batch row not found", 404);
+
+        const newOrderIndex = (originalCcRow.orderIndex || 0) + 1;
+
+        // Shift subsequent batch rows down by 1
+        await InvCcRow.increment('orderIndex', {
+            by: 1,
+            where: {
+                parentRowId: rowId,
+                isDeleted: false,
+                orderIndex: { [Op.gte]: newOrderIndex }
+            },
+            transaction: t
+        });
+
+        const newCcRow = await InvCcRow.create({
+            parentRowId: rowId,
+            orderIndex: newOrderIndex,
+            status: originalCcRow.status
+        }, { transaction: t });
+
+        const cells = await InvCcCell.findAll({ where: { ccRowId: originalCcRow.id }, transaction: t });
+        if (cells.length > 0) {
+            const newCells = cells.map(c => {
+                let rawVal = c.rawValue;
+                let compVal = c.computedValue;
+                let fmtVal = c.formattedValue;
+
+                // Condition: batch no, expiry date, stock qty start empty/0 for duplicated batch row
+                if (c.columnId === "col-cc-batch" || c.columnId === "col-cc-expiry-date") {
+                    rawVal = "";
+                    compVal = "";
+                    fmtVal = "";
+                } else if (c.columnId === "col-cc-quantity-stock" || c.columnId === "col-cc-quantity-notified") {
+                    rawVal = "0";
+                    compVal = "0";
+                    fmtVal = "0";
+                }
+
+                return {
+                    ccRowId: newCcRow.id,
+                    columnId: c.columnId,
+                    rawValue: rawVal,
+                    computedValue: compVal,
+                    formattedValue: fmtVal,
+                    bgColor: c.bgColor
+                };
+            });
+            await InvCcCell.bulkCreate(newCells, { transaction: t });
+        }
+
+        await syncParentInventory(rowId, t);
+        await t.commit();
+
+        const createdCcRow = await InvCcRow.findByPk(newCcRow.id, {
+            include: [{ model: InvCcCell, as: "cells" }]
+        });
+
+        res.status(201).json({ data: createdCcRow, message: "Batch row duplicated" });
+    } catch (e) {
+        await t.rollback();
+        next(e);
+    }
+};
+
 // Bulk update CC cells: body = { cells: [{ columnId, rawValue, computedValue }] }
 export const updateCcCells = async (req, res, next) => {
     const t = await sequelize.transaction();
@@ -500,4 +579,132 @@ export const listAllBatches = async (req, res, next) => {
 
         res.json({ data: result });
     } catch (e) { next(e); }
+};
+
+export const copyRow = async (req, res, next) => {
+    const t = await sequelize.transaction();
+    try {
+        const { id: spreadsheetId, rowId } = req.params;
+        const originalRow = await InvRow.findOne({
+            where: { id: rowId, spreadsheetId, isDeleted: false },
+            transaction: t
+        });
+        if (!originalRow) throw new AppError("Row not found", 404);
+
+        const newOrder = originalRow.order + 1;
+
+        // Shift subsequent rows
+        await InvRow.increment('order', {
+            by: 1,
+            where: {
+                spreadsheetId,
+                isDeleted: false,
+                order: { [Op.gte]: newOrder }
+            },
+            transaction: t
+        });
+
+        // 1. Create duplicate row
+        const newRow = await InvRow.create({
+            spreadsheetId,
+            order: newOrder,
+            rowColor: originalRow.rowColor,
+            height: originalRow.height
+        }, { transaction: t });
+
+        // 2. Duplicate main cells
+        const mainCells = await InvCell.findAll({ where: { rowId: originalRow.id }, transaction: t });
+        if (mainCells.length > 0) {
+            const newMainCells = mainCells.map(cell => ({
+                rowId: newRow.id,
+                columnId: cell.columnId,
+                rawValue: cell.rawValue,
+                computedValue: cell.computedValue,
+                formattedValue: cell.formattedValue,
+                bgColor: cell.bgColor,
+                fileUrl: cell.fileUrl
+            }));
+            await InvCell.bulkCreate(newMainCells, { transaction: t });
+        }
+
+        // 3. Duplicate CC Meta dropdown settings
+        const ccMetas = await InvCcMeta.findAll({ where: { invRowId: originalRow.id }, transaction: t });
+        if (ccMetas.length > 0) {
+            const newCcMetas = ccMetas.map(meta => ({
+                invRowId: newRow.id,
+                colKey: meta.colKey,
+                metaValue: meta.metaValue
+            }));
+            await InvCcMeta.bulkCreate(newCcMetas, { transaction: t });
+        }
+
+        // 4. Duplicate Sub-Table Batch Rows (InvCcRow & InvCcCell)
+        const ccRows = await InvCcRow.findAll({
+            where: { parentRowId: originalRow.id, isDeleted: false },
+            order: [["orderIndex", "ASC"]],
+            transaction: t
+        });
+
+        for (const ccRow of ccRows) {
+            const newCcRow = await InvCcRow.create({
+                parentRowId: newRow.id,
+                orderIndex: ccRow.orderIndex || 0,
+                status: ccRow.status
+            }, { transaction: t });
+
+            const ccCells = await InvCcCell.findAll({ where: { ccRowId: ccRow.id }, transaction: t });
+            if (ccCells.length > 0) {
+                const newCcCells = ccCells.map(c => {
+                    let rawVal = c.rawValue;
+                    let compVal = c.computedValue;
+                    let fmtVal = c.formattedValue;
+
+                    // Condition: When row is duplicated, batch no, expiry date, and stock qty start empty/0
+                    if (c.columnId === "col-cc-batch" || c.columnId === "col-cc-expiry-date") {
+                        rawVal = "";
+                        compVal = "";
+                        fmtVal = "";
+                    } else if (c.columnId === "col-cc-quantity-stock" || c.columnId === "col-cc-quantity-notified") {
+                        rawVal = "0";
+                        compVal = "0";
+                        fmtVal = "0";
+                    }
+
+                    return {
+                        ccRowId: newCcRow.id,
+                        columnId: c.columnId,
+                        rawValue: rawVal,
+                        computedValue: compVal,
+                        formattedValue: fmtVal,
+                        bgColor: c.bgColor
+                    };
+                });
+                await InvCcCell.bulkCreate(newCcCells, { transaction: t });
+            }
+        }
+
+        // 5. Sync total retail inventory stock for the new row
+        await syncParentInventory(newRow.id, t);
+
+        await t.commit();
+
+        // Fetch full new row with main cells and CC rows for response
+        const createdRow = await InvRow.findByPk(newRow.id, {
+            include: [
+                { model: InvCell, as: "cells" },
+                {
+                    model: InvCcRow,
+                    as: "ccRows",
+                    where: { isDeleted: false },
+                    required: false,
+                    include: [{ model: InvCcCell, as: "cells" }]
+                }
+            ]
+        });
+
+        res.status(201).json({ data: createdRow, message: "Inventory row duplicated successfully" });
+    } catch (e) {
+        await t.rollback();
+        next(e);
+    }
 };

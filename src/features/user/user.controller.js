@@ -41,7 +41,11 @@ export const register = async (req, res, next) => {
       if (existingEmail) throw new AppError("Email already registered", 409);
     }
 
-    const assignedRole = (req.user && ["admin", "superadmin"].includes(req.user.role))
+    if (req.user && req.user.role !== "superadmin") {
+      throw new AppError("Forbidden – only Super Admin can add new users", 403);
+    }
+
+    const assignedRole = (req.user && req.user.role === "superadmin")
       ? (role || "staff")
       : "staff";
 
@@ -228,6 +232,13 @@ export const getAll = async (req, res, next) => {
     const where = {};
     if (req.query.role) where.role = req.query.role;
     if (req.query.isActive !== undefined) where.isActive = req.query.isActive === "true";
+
+    // Role-based visibility scoping
+    if (req.user?.role !== "superadmin") {
+      // Admin and Staff only see their own profile details
+      where.id = req.user.id;
+    }
+
     const { rows, count } = await User.findAndCountAll({
       where, limit, offset,
       attributes: { exclude: ["password"] },
@@ -269,8 +280,20 @@ export const updateUser = async (req, res, next) => {
   try {
     const user = await User.findByPk(req.params.id);
     if (!user) throw new AppError("User not found", 404);
+
+    // Non-superadmins cannot modify superadmin accounts
+    if (req.user?.role !== "superadmin" && user.role === "superadmin") {
+      throw new AppError("Forbidden – cannot modify Super Admin accounts", 403);
+    }
+
     const old = { name: user.name, email: user.email, phone: user.phone, role: user.role, isActive: user.isActive };
     const { name, email, phone, role, isActive, avatar } = req.body;
+
+    // Non-superadmins cannot assign superadmin role
+    if (req.user?.role !== "superadmin" && role === "superadmin") {
+      throw new AppError("Forbidden – cannot assign Super Admin role", 403);
+    }
+
     const updates = { name, email, phone, role, isActive, avatar };
 
     await user.update(updates);
@@ -285,6 +308,12 @@ export const deleteUser = async (req, res, next) => {
   try {
     const user = await User.findByPk(req.params.id);
     if (!user) throw new AppError("User not found", 404);
+
+    // Non-superadmins cannot delete superadmin accounts
+    if (req.user?.role !== "superadmin" && user.role === "superadmin") {
+      throw new AppError("Forbidden – cannot delete Super Admin accounts", 403);
+    }
+
     await user.update({ isActive: false });
     // Revoke all refresh tokens for this user
     await RefreshToken.update({ isRevoked: true }, { where: { userId: user.id } });
