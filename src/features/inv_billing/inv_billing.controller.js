@@ -130,7 +130,7 @@ async function adjustBatchStock(ccRowId, qtyDelta, transaction) {
             transaction
         });
         if (mainInventoryCell) {
-            await mainInventoryCell.update({ rawValue: String(totalStock) }, { transaction });
+            await mainInventoryCell.update({ rawValue: String(totalStock), computedValue: String(totalStock) }, { transaction });
         }
     }
 }
@@ -149,9 +149,6 @@ export const listParties = async (req, res, next) => {
     try {
         const Model = getPartyModel(req.params.type);
         const where = { isDeleted: false };
-        if (req.user && req.user.role === 'admin') {
-            where.createdBy = req.user.id;
-        }
         const parties = await Model.findAll({ where, order: [["name", "ASC"]] });
         res.json({ data: parties });
     } catch (e) { next(e); }
@@ -259,9 +256,6 @@ export const listInvoices = async (req, res, next) => {
         const where = { isDeleted: false };
         if (req.query.type && ["retail", "wholesale"].includes(req.query.type)) {
             where.type = req.query.type;
-        }
-        if (req.user && req.user.role === 'admin') {
-            where.createdBy = req.user.id;
         }
         const invoices = await Invoice.findAll({
             where,
@@ -502,9 +496,6 @@ export const listLedger = async (req, res, next) => {
     try {
         const where = { isDeleted: false };
         if (req.query.type) where.type = req.query.type;
-        if (req.user && req.user.role === 'admin') {
-            where.createdBy = req.user.id;
-        }
         const entries = await LedgerEntry.findAll({ where, order: [["createdAt", "DESC"]] });
         res.json({ data: entries });
     } catch (e) { next(e); }

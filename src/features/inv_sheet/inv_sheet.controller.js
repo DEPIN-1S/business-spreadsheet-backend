@@ -520,6 +520,7 @@ export const updateCcCells = async (req, res, next) => {
             await syncCcRowStatusAndNotification(req.params.ccRowId, t);
         }
 
+        let parentTotalStock = null;
         if (hasStockChange) {
             const ccRow = await InvCcRow.findOne({
                 where: { id: req.params.ccRowId },
@@ -527,11 +528,18 @@ export const updateCcCells = async (req, res, next) => {
             });
             if (ccRow && ccRow.parentRowId) {
                 await syncParentInventory(ccRow.parentRowId, t);
+                const parentCell = await InvCell.findOne({
+                    where: { rowId: ccRow.parentRowId, columnId: "col-retail-inventory" },
+                    transaction: t
+                });
+                if (parentCell) {
+                    parentTotalStock = parentCell.rawValue;
+                }
             }
         }
 
         await t.commit();
-        res.json({ message: "Batch cells updated" });
+        res.json({ message: "Batch cells updated", totalStock: parentTotalStock });
     } catch (e) {
         await t.rollback();
         next(e);

@@ -29,6 +29,7 @@ async function ensurePartyColumns() {
     await alterQuery('retail_parties', 'panNo', 'VARCHAR(100) NULL');
     await alterQuery('retail_parties', 'dobYear', 'INT NULL');
     await alterQuery('retail_parties', 'age', 'INT NULL');
+    await alterQuery('retail_parties', 'createdBy', 'VARCHAR(36) NULL');
 
     await alterQuery('wholesale_parties', 'registrationNo', 'TEXT NULL');
     await alterQuery('wholesale_parties', 'dlNo', 'VARCHAR(100) NULL');
@@ -36,6 +37,10 @@ async function ensurePartyColumns() {
     await alterQuery('wholesale_parties', 'panNo', 'VARCHAR(100) NULL');
     await alterQuery('wholesale_parties', 'dobYear', 'INT NULL');
     await alterQuery('wholesale_parties', 'age', 'INT NULL');
+    await alterQuery('wholesale_parties', 'createdBy', 'VARCHAR(36) NULL');
+
+    await alterQuery('invoices', 'createdBy', 'VARCHAR(36) NULL');
+    await alterQuery('ledger_entries', 'createdBy', 'VARCHAR(36) NULL');
 }
 
 sequelize
