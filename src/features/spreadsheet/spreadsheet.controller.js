@@ -1,3 +1,4 @@
+import { Op } from "sequelize";
 import Spreadsheet from "./spreadsheet.model.js";
 import Column from "./column.model.js";
 import Row from "./row.model.js";
@@ -13,7 +14,6 @@ import { logAction } from "../../utils/auditLogger.js";
 import AppError from "../../utils/AppError.js";
 import { getPagination, getMeta } from "../../utils/pagination.js";
 import { getIO } from "../../config/socket.js";
-import { Op } from "sequelize";
 import logger from "../../config/logger.js";
 import User from "../user/user.model.js";
 import sequelize from "../../config/db.js";
@@ -1133,7 +1133,7 @@ export const getSharedWithMe = async (req, res, next) => {
         const { page, limit, offset } = getPagination(req);
         const { folderId } = req.query; // virtual folder id
 
-        // 1. Fetch shared files (via SheetPermission)
+        // Fetch shared files (via SheetPermission) where userId = req.user.id and file was created by ANOTHER user
         const wherePerm = { userId: req.user.id };
         if (folderId !== undefined) {
             wherePerm.virtualFolderId = (folderId === "root" || !folderId) ? null : folderId;
@@ -1144,7 +1144,11 @@ export const getSharedWithMe = async (req, res, next) => {
             include: [
                 {
                     model: Spreadsheet,
-                    where: { isDeleted: false, isDetailedView: false },
+                    where: {
+                        isDeleted: false,
+                        isDetailedView: false,
+                        createdBy: { [Op.ne]: req.user.id }
+                    },
                     include: [{ model: User, as: "creator", attributes: ["id", "name", "email", "role", "avatar"] }]
                 },
                 {
@@ -1175,35 +1179,10 @@ export const getSharedWithMe = async (req, res, next) => {
             };
         });
 
-        // 2. Fetch owned files in this specific virtual folder (if any)
-        const ownedSheets = await Spreadsheet.findAll({
-            where: {
-                createdBy: req.user.id,
-                folderId: (folderId === "root" || !folderId) ? null : folderId,
-                isDeleted: false,
-                isDetailedView: false
-            },
-            include: [{ model: User, as: "creator", attributes: ["id", "name", "email", "role", "avatar"] }]
-        });
-        const ownedData = ownedSheets.map(sheet => ({
-            ...sheet.toJSON(),
-            permissionRole: "owner",
-            sharedBy: { id: req.user.id, name: "Me", role: req.user.role },
-            isOwned: true
-        }));
-
-        // BUG #7 FIX: Deduplicate by sheet id — shared + owned can return the same sheet
-        const allFilesMap = new Map();
-        // Shared items first (they carry the richer sharedBy info)
-        for (const f of sharedData) { allFilesMap.set(f.id, f); }
-        // Owned items only added if not already in map
-        for (const f of ownedData) { if (!allFilesMap.has(f.id)) allFilesMap.set(f.id, f); }
-        const combinedFiles = Array.from(allFilesMap.values());
-
         // Sort by date desc
-        combinedFiles.sort((a, b) => new Date(b.sharedAt || b.createdAt) - new Date(a.sharedAt || a.createdAt));
+        sharedData.sort((a, b) => new Date(b.sharedAt || b.createdAt) - new Date(a.sharedAt || a.createdAt));
 
-        // 3. Fetch virtual folders owned by the user
+        // Fetch virtual folders owned by the user
         let folders = [];
         if (page === 1 || page === "1") {
             folders = await Folder.findAll({
@@ -1218,10 +1197,10 @@ export const getSharedWithMe = async (req, res, next) => {
 
         res.json({ 
             data: { 
-                files: combinedFiles.slice(offset, offset + limit),
+                files: sharedData.slice(offset, offset + limit),
                 folders: folders
             }, 
-            meta: getMeta(page, limit, combinedFiles.length) 
+            meta: getMeta(page, limit, sharedData.length) 
         });
     } catch (e) { next(e); }
 };
