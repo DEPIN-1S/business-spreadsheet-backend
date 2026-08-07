@@ -30,7 +30,7 @@ async function createRefreshToken(userId) {
 
 export const register = async (req, res, next) => {
   try {
-    const { name, email, phone, role, avatar } = req.body;
+    const { name, email, phone, role, avatar, isActive } = req.body;
 
     // Check if phone already registered
     const existingPhone = await User.findOne({ where: { phone } });
@@ -49,7 +49,14 @@ export const register = async (req, res, next) => {
       ? (role || "staff")
       : "staff";
 
-    const user = await User.create({ name, email, phone, avatar, role: assignedRole });
+    const user = await User.create({
+      name,
+      email,
+      phone,
+      avatar,
+      role: assignedRole,
+      isActive: isActive !== undefined ? isActive : true
+    });
     await logAction(req.user?.id || null, "user", user.id, "create", null, { phone, role: assignedRole }, req);
 
     const accessToken = signAccessToken(user);
@@ -59,7 +66,7 @@ export const register = async (req, res, next) => {
       data: {
         accessToken,
         refreshToken,
-        user: { id: user.id, name: user.name, email: user.email, role: user.role, avatar: user.avatar }
+        user: { id: user.id, name: user.name, email: user.email, role: user.role, avatar: user.avatar, isActive: user.isActive }
       },
       message: "Registered successfully"
     });
@@ -297,8 +304,13 @@ export const updateUser = async (req, res, next) => {
     const updates = { name, email, phone, role, isActive, avatar };
 
     await user.update(updates);
+
+    if (isActive === false) {
+      await RefreshToken.update({ isRevoked: true }, { where: { userId: user.id } });
+    }
+
     await logAction(req.user.id, "user", user.id, "update", old, { name, email, phone, role, isActive }, req);
-    res.json({ data: { id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role, avatar: user.avatar }, message: "User updated" });
+    res.json({ data: { id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role, avatar: user.avatar, isActive: user.isActive }, message: "User updated" });
   } catch (e) { next(e); }
 };
 
