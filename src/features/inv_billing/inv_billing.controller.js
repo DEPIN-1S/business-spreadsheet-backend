@@ -76,7 +76,6 @@ async function autoUpdateBatchStatus(ccRowId, currentQty, transaction) {
                     currentQty
                 }, { transaction });
 
-                // Dispatch SMTP email alert asynchronously
                 sendStockAlertEmail({
                     type,
                     title,
@@ -87,6 +86,16 @@ async function autoUpdateBatchStatus(ccRowId, currentQty, transaction) {
                 }).catch(err => console.error("[EmailService Error]", err));
             }
         }
+    }
+}
+
+async function autoUpdateBatchStatus(ccRowId, currentQty, transaction) {
+    const notifiedCell = await InvCcCell.findOne({
+        where: { ccRowId, columnId: "col-cc-notified" },
+        transaction
+    });
+    if (notifiedCell && currentQty > 10) {
+        await notifiedCell.update({ rawValue: "false" }, { transaction });
     }
 }
 
@@ -101,7 +110,7 @@ async function adjustBatchStock(ccRowId, qtyDelta, transaction) {
     await stockCell.update({ rawValue: String(newQty) }, { transaction });
     await autoUpdateBatchStatus(ccRowId, newQty, transaction);
 
-    // Sync parent product row main cell "col-retail-inventory"
+    // Sync parent product row main cell
     const ccRow = await InvCcRow.findOne({
         where: { id: ccRowId },
         transaction
@@ -125,10 +134,7 @@ async function adjustBatchStock(ccRowId, qtyDelta, transaction) {
             totalStock += parseFloat(cell.rawValue || 0);
         }
 
-        const mainInventoryCell = await InvCell.findOne({
-            where: { rowId: parentRowId, columnId: "col-retail-inventory" },
-            transaction
-        });
+        const mainInventoryCell = await findParentInventoryCell(parentRowId, transaction);
         if (mainInventoryCell) {
             await mainInventoryCell.update({ rawValue: String(totalStock), computedValue: String(totalStock) }, { transaction });
         }

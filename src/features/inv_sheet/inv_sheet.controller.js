@@ -15,6 +15,49 @@ import AppError from "../../utils/AppError.js";
 // HELPERS FOR STOCK SYNC & STATUS UPDATE
 // ─────────────────────────────────────────────────────────────────────────────
 
+async function findParentInventoryCell(parentRowId, transaction) {
+    let cell = await InvCell.findOne({
+        where: {
+            rowId: parentRowId,
+            columnId: { [Op.in]: ["col-retail-inventory", "col-inventory", "col-wholesale-inventory", "col-3"] }
+        },
+        transaction
+    });
+    if (cell) return cell;
+
+    const parentRow = await InvRow.findOne({ where: { id: parentRowId }, transaction });
+    if (!parentRow) return null;
+
+    const invColumn = await InvColumn.findOne({
+        where: {
+            spreadsheetId: parentRow.spreadsheetId,
+            [Op.or]: [
+                { type: "inventory" },
+                { title: { [Op.like]: "%inventory%" } },
+                { title: { [Op.like]: "%stock%" } }
+            ]
+        },
+        transaction
+    });
+
+    if (invColumn) {
+        cell = await InvCell.findOne({
+            where: { rowId: parentRowId, columnId: invColumn.id },
+            transaction
+        });
+        if (!cell && invColumn.columnId) {
+            cell = await InvCell.findOne({
+                where: { rowId: parentRowId, columnId: invColumn.columnId },
+                transaction
+            });
+        }
+        if (cell) return cell;
+    }
+
+    const allCells = await InvCell.findAll({ where: { rowId: parentRowId }, transaction });
+    return allCells.find(c => c.columnId.includes("inventory")) || allCells[2] || allCells[0] || null;
+}
+
 async function syncParentInventory(parentRowId, transaction) {
     const allCcRows = await InvCcRow.findAll({
         where: { parentRowId, isDeleted: false },
@@ -33,10 +76,7 @@ async function syncParentInventory(parentRowId, transaction) {
         totalStock += parseFloat(cell.rawValue || 0);
     }
 
-    const mainInventoryCell = await InvCell.findOne({
-        where: { rowId: parentRowId, columnId: "col-retail-inventory" },
-        transaction
-    });
+    const mainInventoryCell = await findParentInventoryCell(parentRowId, transaction);
     if (mainInventoryCell) {
         await mainInventoryCell.update({ rawValue: String(totalStock), computedValue: String(totalStock) }, { transaction });
     }
@@ -542,10 +582,7 @@ export const updateCcCells = async (req, res, next) => {
             });
             if (ccRow && ccRow.parentRowId) {
                 await syncParentInventory(ccRow.parentRowId, t);
-                const parentCell = await InvCell.findOne({
-                    where: { rowId: ccRow.parentRowId, columnId: "col-retail-inventory" },
-                    transaction: t
-                });
+                const parentCell = await findParentInventoryCell(ccRow.parentRowId, t);
                 if (parentCell) {
                     parentTotalStock = parentCell.rawValue;
                 }
