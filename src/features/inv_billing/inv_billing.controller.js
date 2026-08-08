@@ -32,6 +32,17 @@ async function autoUpdateBatchStatus(ccRowId, currentQty, transaction) {
         ccRowId, columnId: "col-cc-status", rawValue: status
     }, { transaction });
 
+    // Reset notified status if stock replenished
+    if (currentQty > 10) {
+        const notifiedResetCell = await InvCcCell.findOne({
+            where: { ccRowId, columnId: "col-cc-notified" },
+            transaction
+        });
+        if (notifiedResetCell) {
+            await notifiedResetCell.update({ rawValue: "false" }, { transaction });
+        }
+    }
+
     // Also trigger/update notification
     if (status === "Out of Stock" || status === "Low Stock") {
         const ccRow = await InvCcRow.findByPk(ccRowId, {
@@ -89,14 +100,6 @@ async function autoUpdateBatchStatus(ccRowId, currentQty, transaction) {
     }
 }
 
-async function autoUpdateBatchStatus(ccRowId, currentQty, transaction) {
-    const notifiedCell = await InvCcCell.findOne({
-        where: { ccRowId, columnId: "col-cc-notified" },
-        transaction
-    });
-    if (notifiedCell && currentQty > 10) {
-        await notifiedCell.update({ rawValue: "false" }, { transaction });
-    }
 }
 
 async function adjustBatchStock(ccRowId, qtyDelta, transaction) {

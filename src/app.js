@@ -39,7 +39,7 @@ app.use(cors({
 
         const allowedOrigins = (process.env.FRONTEND_URL || "").split(",").map(o => o.trim()).filter(Boolean);
         const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
-        const isDatsheets = /^https?:\/\/(.+\.)?datsheets\.in$/i.test(origin);
+        const isDatsheets = /datsheets\.in/i.test(origin);
 
         if (isLocalhost || isDatsheets || allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
             callback(null, true);

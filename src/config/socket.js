@@ -16,7 +16,7 @@ export function initSocket(httpServer) {
                 if (!origin) return callback(null, true);
                 const envOrigins = (process.env.FRONTEND_URL || "").split(",").map(o => o.trim()).filter(Boolean);
                 const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
-                const isDatsheets = /^https?:\/\/(.+\.)?datsheets\.in$/i.test(origin);
+                const isDatsheets = /datsheets\.in/i.test(origin);
                 if (isLocalhost || isDatsheets || envOrigins.includes(origin) || envOrigins.includes("*")) {
                     callback(null, true);
                 } else {
