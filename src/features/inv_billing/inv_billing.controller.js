@@ -100,8 +100,6 @@ async function autoUpdateBatchStatus(ccRowId, currentQty, transaction) {
     }
 }
 
-}
-
 async function adjustBatchStock(ccRowId, qtyDelta, transaction) {
     const stockCell = await InvCcCell.findOne({
         where: { ccRowId, columnId: "col-cc-quantity-stock" },
