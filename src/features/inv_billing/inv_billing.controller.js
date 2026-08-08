@@ -257,11 +257,20 @@ export const listInvoices = async (req, res, next) => {
         if (req.query.type && ["retail", "wholesale"].includes(req.query.type)) {
             where.type = req.query.type;
         }
-        const invoices = await Invoice.findAll({
-            where,
-            include: [{ model: InvoiceItem, as: "items", where: { isDeleted: false }, required: false }],
-            order: [["createdAt", "DESC"]]
-        });
+        let invoices = [];
+        try {
+            invoices = await Invoice.findAll({
+                where,
+                include: [{ model: InvoiceItem, as: "items", where: { isDeleted: false }, required: false }],
+                order: [["createdAt", "DESC"]]
+            });
+        } catch (err) {
+            console.warn("Falling back to basic invoice query without items include:", err.message);
+            invoices = await Invoice.findAll({
+                where,
+                order: [["createdAt", "DESC"]]
+            });
+        }
         res.json({ data: invoices });
     } catch (e) { next(e); }
 };
@@ -272,6 +281,7 @@ export const createInvoice = async (req, res, next) => {
         const {
             type, partyId, partyType, partyName, invoiceDate,
             items = [], subtotal, taxAmount, grandTotal,
+            itemSubtotal, discountAmount, additionalChargesAmount, additionalCharges, roundOffAmount,
             paymentMethod, paymentStatus, pendingAmount,
             combinedUpiAmount, combinedCashAmount, notes
         } = req.body;
@@ -285,6 +295,11 @@ export const createInvoice = async (req, res, next) => {
             invoiceNo, type, partyId, partyType, partyName,
             invoiceDate, subtotal: subtotal || 0,
             taxAmount: taxAmount || 0, grandTotal: grandTotal || 0,
+            itemSubtotal: itemSubtotal || 0,
+            discountAmount: discountAmount || 0,
+            additionalChargesAmount: additionalChargesAmount || 0,
+            additionalCharges: additionalCharges || null,
+            roundOffAmount: roundOffAmount || 0,
             paymentMethod, paymentStatus: paymentStatus || "Unpaid",
             pendingAmount: pendingAmount || 0,
             combinedUpiAmount: combinedUpiAmount || 0,
@@ -300,6 +315,10 @@ export const createInvoice = async (req, res, next) => {
                 batch: item.batch,
                 qty: item.qty || 0,
                 price: item.price || 0,
+                mrp: item.mrp || 0,
+                gstPercent: item.gstPercent || item.gst || 5,
+                expiry: item.expiry || item.expDate || '',
+                hsnCode: item.hsnCode || item.hsn || '',
                 isDeleted: false
             }));
             await InvoiceItem.bulkCreate(itemRows, { transaction: t });
@@ -338,12 +357,33 @@ export const createInvoice = async (req, res, next) => {
 
 export const getInvoice = async (req, res, next) => {
     try {
-        const invoice = await Invoice.findOne({
-            where: { id: req.params.id, isDeleted: false },
-            include: [{ model: InvoiceItem, as: "items", where: { isDeleted: false }, required: false }]
-        });
+        let invoice;
+        try {
+            invoice = await Invoice.findOne({
+                where: { id: req.params.id, isDeleted: false },
+                include: [{ model: InvoiceItem, as: "items", where: { isDeleted: false }, required: false }]
+            });
+        } catch (err) {
+            console.warn("Falling back to basic getInvoice query without items include:", err.message);
+            invoice = await Invoice.findOne({
+                where: { id: req.params.id, isDeleted: false }
+            });
+        }
         if (!invoice) throw new AppError("Invoice not found", 404);
-        res.json({ data: invoice });
+
+        const plainInvoice = invoice.get({ plain: true });
+        if (plainInvoice.partyId && plainInvoice.partyType) {
+            try {
+                const PartyModel = getPartyModel(plainInvoice.partyType);
+                const partyObj = await PartyModel.findByPk(plainInvoice.partyId);
+                if (partyObj) {
+                    plainInvoice.party = partyObj.get({ plain: true });
+                }
+            } catch (err) {
+                console.error("Error populating party for invoice:", err);
+            }
+        }
+        res.json({ data: plainInvoice });
     } catch (e) { next(e); }
 };
 
@@ -360,6 +400,7 @@ export const updateInvoice = async (req, res, next) => {
         const {
             partyId, partyType, partyName, invoiceDate,
             items, subtotal, taxAmount, grandTotal,
+            itemSubtotal, discountAmount, additionalChargesAmount, additionalCharges, roundOffAmount,
             paymentMethod, paymentStatus, pendingAmount,
             combinedUpiAmount, combinedCashAmount, notes
         } = req.body;
@@ -382,6 +423,10 @@ export const updateInvoice = async (req, res, next) => {
                     batch: item.batch,
                     qty: item.qty || 0,
                     price: item.price || 0,
+                    mrp: item.mrp || 0,
+                    gstPercent: item.gstPercent || item.gst || 5,
+                    expiry: item.expiry || item.expDate || '',
+                    hsnCode: item.hsnCode || item.hsn || '',
                     isDeleted: false
                 }));
                 await InvoiceItem.bulkCreate(itemRows, { transaction: t });
@@ -401,6 +446,11 @@ export const updateInvoice = async (req, res, next) => {
             invoiceDate: invoiceDate !== undefined ? invoiceDate : invoice.invoiceDate,
             subtotal: subtotal !== undefined ? subtotal : invoice.subtotal,
             taxAmount: taxAmount !== undefined ? taxAmount : invoice.taxAmount,
+            itemSubtotal: itemSubtotal !== undefined ? itemSubtotal : invoice.itemSubtotal,
+            discountAmount: discountAmount !== undefined ? discountAmount : invoice.discountAmount,
+            additionalChargesAmount: additionalChargesAmount !== undefined ? additionalChargesAmount : invoice.additionalChargesAmount,
+            additionalCharges: additionalCharges !== undefined ? additionalCharges : invoice.additionalCharges,
+            roundOffAmount: roundOffAmount !== undefined ? roundOffAmount : invoice.roundOffAmount,
             grandTotal: grandTotal !== undefined ? grandTotal : invoice.grandTotal,
             paymentMethod: paymentMethod !== undefined ? paymentMethod : invoice.paymentMethod,
             paymentStatus: paymentStatus !== undefined ? paymentStatus : invoice.paymentStatus,

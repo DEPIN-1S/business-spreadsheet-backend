@@ -40,7 +40,18 @@ async function ensurePartyColumns() {
     await alterQuery('wholesale_parties', 'createdBy', 'VARCHAR(36) NULL');
 
     await alterQuery('invoices', 'createdBy', 'VARCHAR(36) NULL');
+    await alterQuery('invoices', 'itemSubtotal', 'DECIMAL(15,2) DEFAULT 0');
+    await alterQuery('invoices', 'discountAmount', 'DECIMAL(15,2) DEFAULT 0');
+    await alterQuery('invoices', 'additionalChargesAmount', 'DECIMAL(15,2) DEFAULT 0');
+    await alterQuery('invoices', 'additionalCharges', 'TEXT NULL');
+    await alterQuery('invoices', 'roundOffAmount', 'DECIMAL(15,2) DEFAULT 0');
+
     await alterQuery('ledger_entries', 'createdBy', 'VARCHAR(36) NULL');
+
+    await alterQuery('invoice_items', 'mrp', 'DECIMAL(15,2) DEFAULT 0');
+    await alterQuery('invoice_items', 'gstPercent', 'DECIMAL(5,2) DEFAULT 5');
+    await alterQuery('invoice_items', 'expiry', 'VARCHAR(50) NULL');
+    await alterQuery('invoice_items', 'hsnCode', 'VARCHAR(50) NULL');
 }
 
 sequelize

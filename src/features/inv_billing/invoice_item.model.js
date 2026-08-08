@@ -9,6 +9,10 @@ const InvoiceItem = sequelize.define("InvoiceItem", {
     batch: { type: DataTypes.STRING(100), allowNull: true },
     qty: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0 },
     price: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
+    mrp: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
+    gstPercent: { type: DataTypes.DECIMAL(5, 2), defaultValue: 5 },
+    expiry: { type: DataTypes.STRING(50), allowNull: true },
+    hsnCode: { type: DataTypes.STRING(50), allowNull: true },
     lineTotal: {
         type: DataTypes.VIRTUAL,
         get() { return (parseFloat(this.qty || 0) * parseFloat(this.price || 0)).toFixed(2); }

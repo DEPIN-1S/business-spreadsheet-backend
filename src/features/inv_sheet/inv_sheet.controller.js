@@ -354,16 +354,30 @@ export const updateCcMeta = async (req, res, next) => {
         const row = await InvRow.findOne({ where: { id: req.params.rowId, isDeleted: false } });
         if (!row) throw new AppError("Row not found", 404);
         const { gst, category, division, manufacturer, companyName, quantity, hsnCode } = req.body;
-        const [meta] = await InvCcMeta.upsert({
-            rowId: req.params.rowId,
-            ...(gst !== undefined ? { gst } : {}),
-            ...(category !== undefined ? { category } : {}),
-            ...(division !== undefined ? { division } : {}),
-            ...(manufacturer !== undefined ? { manufacturer } : {}),
-            ...(companyName !== undefined ? { companyName } : {}),
-            ...(quantity !== undefined ? { quantity } : {}),
-            ...(hsnCode !== undefined ? { hsnCode } : {})
-        });
+
+        let meta = await InvCcMeta.findOne({ where: { rowId: req.params.rowId } });
+        if (meta) {
+            await meta.update({
+                ...(gst !== undefined ? { gst } : {}),
+                ...(category !== undefined ? { category } : {}),
+                ...(division !== undefined ? { division } : {}),
+                ...(manufacturer !== undefined ? { manufacturer } : {}),
+                ...(companyName !== undefined ? { companyName } : {}),
+                ...(quantity !== undefined ? { quantity } : {}),
+                ...(hsnCode !== undefined ? { hsnCode } : {})
+            });
+        } else {
+            meta = await InvCcMeta.create({
+                rowId: req.params.rowId,
+                gst: gst || "",
+                category: category || "",
+                division: division || "",
+                manufacturer: manufacturer || "",
+                companyName: companyName || "",
+                quantity: quantity || "",
+                hsnCode: hsnCode || ""
+            });
+        }
         res.json({ data: meta, message: "Meta updated" });
     } catch (e) { next(e); }
 };
@@ -636,14 +650,18 @@ export const copyRow = async (req, res, next) => {
         }
 
         // 3. Duplicate CC Meta dropdown settings
-        const ccMetas = await InvCcMeta.findAll({ where: { invRowId: originalRow.id }, transaction: t });
-        if (ccMetas.length > 0) {
-            const newCcMetas = ccMetas.map(meta => ({
-                invRowId: newRow.id,
-                colKey: meta.colKey,
-                metaValue: meta.metaValue
-            }));
-            await InvCcMeta.bulkCreate(newCcMetas, { transaction: t });
+        const originalMeta = await InvCcMeta.findOne({ where: { rowId: originalRow.id }, transaction: t });
+        if (originalMeta) {
+            await InvCcMeta.create({
+                rowId: newRow.id,
+                gst: originalMeta.gst,
+                category: originalMeta.category,
+                division: originalMeta.division,
+                manufacturer: originalMeta.manufacturer,
+                companyName: originalMeta.companyName,
+                quantity: originalMeta.quantity,
+                hsnCode: originalMeta.hsnCode
+            }, { transaction: t });
         }
 
         // 4. Duplicate Sub-Table Batch Rows (InvCcRow & InvCcCell)

@@ -11,6 +11,11 @@ const Invoice = sequelize.define("Invoice", {
     partyName: { type: DataTypes.STRING(200), allowNull: true }, // denormalized for display
     subtotal: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
     taxAmount: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
+    itemSubtotal: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
+    discountAmount: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
+    additionalChargesAmount: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
+    additionalCharges: { type: DataTypes.JSON, allowNull: true },
+    roundOffAmount: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
     grandTotal: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
     paymentMethod: {
         type: DataTypes.ENUM("Cash", "UPI", "Card", "Combined", "Bank"),
