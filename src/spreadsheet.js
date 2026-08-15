@@ -47,6 +47,7 @@ async function ensurePartyColumns() {
     await alterQuery('invoices', 'roundOffAmount', 'DECIMAL(15,2) DEFAULT 0');
 
     await alterQuery('ledger_entries', 'createdBy', 'VARCHAR(36) NULL');
+    await alterQuery('ledger_entries', 'proofUrl', 'LONGTEXT NULL');
 
     await alterQuery('invoice_items', 'mrp', 'DECIMAL(15,2) DEFAULT 0');
     await alterQuery('invoice_items', 'gstPercent', 'DECIMAL(5,2) DEFAULT 5');

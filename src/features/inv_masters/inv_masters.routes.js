@@ -3,7 +3,7 @@ import { listMasterOptions, addMasterOption, deleteMasterOption } from "./inv_ma
 import { protect } from "../../middleware/auth.js";
 
 const router = express.Router();
-router.use(protect(["superadmin"]));
+router.use(protect());
 
 // GET  /api/inv/masters/:type        → list options (gst, categories, divisions, manufacturers, companies, quantity-units)
 // POST /api/inv/masters/:type        → add new option

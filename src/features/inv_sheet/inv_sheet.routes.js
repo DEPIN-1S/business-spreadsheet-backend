@@ -10,14 +10,14 @@ import {
 } from "./inv_sheet.controller.js";
 
 const folderRouter = express.Router();
-folderRouter.use(protect(["superadmin"]));
+folderRouter.use(protect());
 folderRouter.get("/", listFolders);
 folderRouter.post("/", createFolder);
 folderRouter.put("/:id", updateFolder);
 folderRouter.delete("/:id", deleteFolder);
 
 const sheetRouter = express.Router();
-sheetRouter.use(protect(["superadmin"]));
+sheetRouter.use(protect());
 
 // File (spreadsheet) routes
 sheetRouter.get("/batches", listAllBatches);

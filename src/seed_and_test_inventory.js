@@ -82,7 +82,8 @@ async function run() {
             { rowId: row1.id, columnId: "col-product-name", rawValue: "Limcee Chewable Vitamin C" },
             { rowId: row1.id, columnId: "col-retail-inventory", rawValue: "515" },
             { rowId: row1.id, columnId: "col-composition", rawValue: "Vitamin C 500mg" },
-            { rowId: row1.id, columnId: "col-company-name", rawValue: "Abbott India" }
+            { rowId: row1.id, columnId: "col-company-name", rawValue: "Abbott India" },
+            { rowId: row1.id, columnId: "col-rack-no", rawValue: "Rack A-12" }
         ];
         await InvCell.bulkCreate(p1Cells);
 
@@ -142,7 +143,8 @@ async function run() {
             { rowId: row2.id, columnId: "col-product-name", rawValue: "Dolo 650mg Tablet" },
             { rowId: row2.id, columnId: "col-retail-inventory", rawValue: "150" },
             { rowId: row2.id, columnId: "col-composition", rawValue: "Paracetamol 650mg" },
-            { rowId: row2.id, columnId: "col-company-name", rawValue: "Micro Labs Ltd" }
+            { rowId: row2.id, columnId: "col-company-name", rawValue: "Micro Labs Ltd" },
+            { rowId: row2.id, columnId: "col-rack-no", rawValue: "Rack B-04" }
         ];
         await InvCell.bulkCreate(p2Cells);
 

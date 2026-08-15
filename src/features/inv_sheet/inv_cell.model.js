@@ -2,9 +2,9 @@ import { DataTypes } from "sequelize";
 import sequelize from "../../config/db.js";
 
 /**
- * Stores cell values for the 7 predefined main inventory columns:
- * col-product-image | col-product-name | col-composition |
- * col-company-name  | col-manufacturer | col-hsn-code    | col-retail-inventory
+ * Stores cell values for the main inventory columns:
+ * col-product-image | col-product-name | col-retail-inventory |
+ * col-composition   | col-company-name | col-rack-no
  */
 const InvCell = sequelize.define("InvCell", {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },

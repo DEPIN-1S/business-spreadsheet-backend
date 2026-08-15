@@ -135,9 +135,19 @@ async function adjustBatchStock(ccRowId, qtyDelta, transaction) {
             totalStock += parseFloat(cell.rawValue || 0);
         }
 
-        const mainInventoryCell = await findParentInventoryCell(parentRowId, transaction);
+        const mainInventoryCell = await InvCell.findOne({
+            where: { rowId: parentRowId, columnId: "col-retail-inventory" },
+            transaction
+        });
         if (mainInventoryCell) {
             await mainInventoryCell.update({ rawValue: String(totalStock), computedValue: String(totalStock) }, { transaction });
+        } else {
+            await InvCell.create({
+                rowId: parentRowId,
+                columnId: "col-retail-inventory",
+                rawValue: String(totalStock),
+                computedValue: String(totalStock)
+            }, { transaction });
         }
     }
 }
@@ -250,12 +260,39 @@ export const deleteParty = async (req, res, next) => {
 // INVOICES
 // ─────────────────────────────────────────────────────────────────────────────
 
-const generateInvoiceNo = async (type) => {
+const generateInvoiceNo = async (type, transaction) => {
     const prefix = type === "retail" ? "INV-RET" : "INV-WH";
     const year = new Date().getFullYear();
-    const count = await Invoice.count({ where: { type } });
-    const seq = String(count + 1).padStart(3, "0");
-    return `${prefix}-${year}-${seq}`;
+
+    const allInvoices = await Invoice.findAll({
+        where: { type },
+        attributes: ["invoiceNo"],
+        transaction
+    });
+
+    let maxSeq = 0;
+    for (const inv of allInvoices) {
+        if (inv.invoiceNo) {
+            const parts = inv.invoiceNo.split("-");
+            const seqNum = parseInt(parts[parts.length - 1], 10);
+            if (!isNaN(seqNum) && seqNum > maxSeq) {
+                maxSeq = seqNum;
+            }
+        }
+    }
+
+    let nextNum = maxSeq + 1;
+    let seq = String(nextNum).padStart(3, "0");
+    let candidate = `${prefix}-${year}-${seq}`;
+
+    let exists = await Invoice.findOne({ where: { invoiceNo: candidate }, transaction });
+    while (exists) {
+        nextNum += 1;
+        seq = String(nextNum).padStart(3, "0");
+        candidate = `${prefix}-${year}-${seq}`;
+        exists = await Invoice.findOne({ where: { invoiceNo: candidate }, transaction });
+    }
+    return candidate;
 };
 
 export const listInvoices = async (req, res, next) => {
@@ -296,7 +333,7 @@ export const createInvoice = async (req, res, next) => {
         if (!type || !["retail", "wholesale"].includes(type)) throw new AppError("type must be 'retail' or 'wholesale'", 422);
         if (!invoiceDate) throw new AppError("invoiceDate is required", 422);
 
-        const invoiceNo = await generateInvoiceNo(type);
+        const invoiceNo = await generateInvoiceNo(type, t);
 
         const invoice = await Invoice.create({
             invoiceNo, type, partyId, partyType, partyName,
@@ -337,19 +374,20 @@ export const createInvoice = async (req, res, next) => {
             }
         }
 
-        if (paymentStatus !== "Paid") {
-            await LedgerEntry.create({
-                invoiceId: invoice.id,
-                invoiceNo,
-                type: type === "retail" ? "Retail" : "Wholesale",
-                customerName: partyName || "",
-                phone: "",
-                date: invoiceDate,
-                pendingAmount: pendingAmount || grandTotal || 0,
-                status: paymentStatus === "Partially Paid" ? "Partially Paid" : "Pending",
-                createdBy: req.user?.id || null
-            }, { transaction: t });
-        }
+        const ledgerStatus = paymentStatus === "Paid" ? "Settled" : (paymentStatus === "Partially Paid" ? "Partially Paid" : "Pending");
+        const ledgerPending = paymentStatus === "Paid" ? 0 : (pendingAmount !== undefined ? pendingAmount : grandTotal || 0);
+
+        await LedgerEntry.create({
+            invoiceId: invoice.id,
+            invoiceNo,
+            type: type === "retail" ? "Retail" : "Wholesale",
+            customerName: partyName || "",
+            phone: "",
+            date: invoiceDate,
+            pendingAmount: ledgerPending,
+            status: ledgerStatus,
+            createdBy: req.user?.id || null
+        }, { transaction: t });
 
         await t.commit();
         const fullInvoice = await Invoice.findByPk(invoice.id, {
@@ -471,31 +509,29 @@ export const updateInvoice = async (req, res, next) => {
         const newPendingAmount = pendingAmount !== undefined ? pendingAmount : invoice.pendingAmount;
         const newPaymentStatus = paymentStatus !== undefined ? paymentStatus : invoice.paymentStatus;
 
-        if (newPaymentStatus === "Paid") {
-            await LedgerEntry.destroy({ where: { invoiceId: invoice.id }, transaction: t });
-        } else {
-            const ledgerStatus = newPaymentStatus === "Partially Paid" ? "Partially Paid" : "Pending";
-            const [ledger, created] = await LedgerEntry.findOrCreate({
-                where: { invoiceId: invoice.id },
-                defaults: {
-                    invoiceNo: invoice.invoiceNo,
-                    type: invoice.type === "retail" ? "Retail" : "Wholesale",
-                    customerName: partyName || invoice.partyName || "",
-                    phone: "",
-                    date: invoiceDate || invoice.invoiceDate,
-                    pendingAmount: newPendingAmount || newGrandTotal || 0,
-                    status: ledgerStatus
-                },
-                transaction: t
-            });
-            if (!created) {
-                await ledger.update({
-                    customerName: partyName || invoice.partyName || "",
-                    date: invoiceDate || invoice.invoiceDate,
-                    pendingAmount: newPendingAmount || newGrandTotal || 0,
-                    status: ledgerStatus
-                }, { transaction: t });
-            }
+        const ledgerStatus = newPaymentStatus === "Paid" ? "Settled" : (newPaymentStatus === "Partially Paid" ? "Partially Paid" : "Pending");
+        const ledgerPending = newPaymentStatus === "Paid" ? 0 : (newPendingAmount !== undefined ? newPendingAmount : newGrandTotal || 0);
+
+        const [ledger, created] = await LedgerEntry.findOrCreate({
+            where: { invoiceId: invoice.id },
+            defaults: {
+                invoiceNo: invoice.invoiceNo,
+                type: invoice.type === "retail" ? "Retail" : "Wholesale",
+                customerName: partyName || invoice.partyName || "",
+                phone: "",
+                date: invoiceDate || invoice.invoiceDate,
+                pendingAmount: ledgerPending,
+                status: ledgerStatus
+            },
+            transaction: t
+        });
+        if (!created) {
+            await ledger.update({
+                customerName: partyName || invoice.partyName || "",
+                date: invoiceDate || invoice.invoiceDate,
+                pendingAmount: ledgerPending,
+                status: ledgerStatus
+            }, { transaction: t });
         }
 
         await t.commit();
@@ -553,6 +589,27 @@ export const listLedger = async (req, res, next) => {
     try {
         const where = { isDeleted: false };
         if (req.query.type) where.type = req.query.type;
+
+        // Auto-sync existing invoices into LedgerEntry if missing
+        const invoices = await Invoice.findAll({ where: { isDeleted: false } });
+        for (const inv of invoices) {
+            const existingLedger = await LedgerEntry.findOne({ where: { invoiceId: inv.id } });
+            if (!existingLedger) {
+                const initialStatus = inv.paymentStatus === "Paid" ? "Settled" : (inv.paymentStatus === "Partially Paid" ? "Partially Paid" : "Pending");
+                const initialPending = inv.paymentStatus === "Paid" ? 0 : (Number(inv.pendingAmount) > 0 ? Number(inv.pendingAmount) : Number(inv.grandTotal || 0));
+                await LedgerEntry.create({
+                    invoiceId: inv.id,
+                    invoiceNo: inv.invoiceNo,
+                    type: inv.type === "retail" ? "Retail" : "Wholesale",
+                    customerName: inv.partyName || "Customer",
+                    phone: "",
+                    date: inv.invoiceDate,
+                    pendingAmount: initialPending,
+                    status: initialStatus
+                });
+            }
+        }
+
         const entries = await LedgerEntry.findAll({ where, order: [["createdAt", "DESC"]] });
         res.json({ data: entries });
     } catch (e) { next(e); }
@@ -562,10 +619,11 @@ export const updateLedger = async (req, res, next) => {
     try {
         const entry = await LedgerEntry.findOne({ where: { id: req.params.id, isDeleted: false } });
         if (!entry) throw new AppError("Ledger entry not found", 404);
-        const { status, pendingAmount } = req.body;
+        const { status, pendingAmount, proofUrl } = req.body;
         await entry.update({
             ...(status ? { status } : {}),
-            ...(pendingAmount !== undefined ? { pendingAmount } : {})
+            ...(pendingAmount !== undefined ? { pendingAmount } : {}),
+            ...(proofUrl !== undefined ? { proofUrl } : {})
         });
         if (status === "Settled" && entry.invoiceId) {
             await Invoice.update({ paymentStatus: "Paid", pendingAmount: 0 }, { where: { id: entry.invoiceId } });
