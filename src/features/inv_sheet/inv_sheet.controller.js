@@ -424,7 +424,7 @@ export const updateCcMeta = async (req, res, next) => {
     try {
         const row = await InvRow.findOne({ where: { id: req.params.rowId, isDeleted: false } });
         if (!row) throw new AppError("Row not found", 404);
-        const { gst, category, division, manufacturer, companyName, quantity, hsnCode, rackNo } = req.body;
+        const { gst, category, division, manufacturer, companyName, quantity, hsnCode, rackNo, composition } = req.body;
 
         let meta = await InvCcMeta.findOne({ where: { rowId: req.params.rowId } });
         if (meta) {
@@ -436,7 +436,8 @@ export const updateCcMeta = async (req, res, next) => {
                 ...(companyName !== undefined ? { companyName } : {}),
                 ...(quantity !== undefined ? { quantity } : {}),
                 ...(hsnCode !== undefined ? { hsnCode } : {}),
-                ...(rackNo !== undefined ? { rackNo } : {})
+                ...(rackNo !== undefined ? { rackNo } : {}),
+                ...(composition !== undefined ? { composition } : {})
             });
         } else {
             meta = await InvCcMeta.create({
@@ -448,7 +449,8 @@ export const updateCcMeta = async (req, res, next) => {
                 companyName: companyName || "",
                 quantity: quantity || "",
                 hsnCode: hsnCode || "",
-                rackNo: rackNo || ""
+                rackNo: rackNo || "",
+                composition: composition || ""
             });
         }
 
@@ -469,12 +471,12 @@ export const updateCcMeta = async (req, res, next) => {
                 computedValue: companyName ?? ""
             });
         }
-        if (category !== undefined) {
+        if (composition !== undefined) {
             await InvCell.upsert({
                 rowId: req.params.rowId,
                 columnId: "col-composition",
-                rawValue: category ?? "",
-                computedValue: category ?? ""
+                rawValue: composition ?? "",
+                computedValue: composition ?? ""
             });
         }
 
@@ -687,6 +689,9 @@ export const listAllBatches = async (req, res, next) => {
             const stockStr = getCellValue(cells, "col-cc-quantity-stock");
             const retailPriceStr = getCellValue(cells, "col-cc-retail-selling-rate");
             const wholesalePriceStr = getCellValue(cells, "col-cc-wholesale-selling-rate");
+            const mrpStr = getCellValue(cells, "col-cc-wholesale-mrp") || getCellValue(cells, "col-cc-mrp");
+            const discountStr = getCellValue(cells, "col-cc-discount");
+            const wholesaleMarginStr = getCellValue(cells, "col-cc-wholesale-margin");
 
             return {
                 ccRowId: row.id,
@@ -696,6 +701,9 @@ export const listAllBatches = async (req, res, next) => {
                 stock: stockStr ? parseFloat(stockStr) : 0,
                 retailPrice: retailPriceStr ? parseFloat(retailPriceStr) : 0,
                 wholesalePrice: wholesalePriceStr ? parseFloat(wholesalePriceStr) : 0,
+                mrp: mrpStr ? parseFloat(mrpStr) : 0,
+                discount: discountStr ? parseFloat(discountStr) : 0,
+                wholesaleMargin: wholesaleMarginStr ? parseFloat(wholesaleMarginStr) : 0,
                 category: getCellValue(parentCells, "col-composition") || "General",
                 rackNo: (row.InvRow?.ccMeta?.rackNo) || getCellValue(parentCells, "col-rack-no") || ""
             };

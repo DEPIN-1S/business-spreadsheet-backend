@@ -11,6 +11,7 @@ const InvoiceItem = sequelize.define("InvoiceItem", {
     price: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
     mrp: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
     gstPercent: { type: DataTypes.DECIMAL(5, 2), defaultValue: 5 },
+    disPercent: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0 },
     expiry: { type: DataTypes.STRING(50), allowNull: true },
     hsnCode: { type: DataTypes.STRING(50), allowNull: true },
     lineTotal: {

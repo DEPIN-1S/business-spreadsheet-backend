@@ -9,6 +9,8 @@ const Invoice = sequelize.define("Invoice", {
     partyId: { type: DataTypes.UUID, allowNull: true },
     partyType: { type: DataTypes.ENUM("retail", "wholesale"), allowNull: true },
     partyName: { type: DataTypes.STRING(200), allowNull: true }, // denormalized for display
+    billingAddress: { type: DataTypes.TEXT, allowNull: true },   // denormalized billing address
+    shippingAddress: { type: DataTypes.TEXT, allowNull: true },  // denormalized shipping address
     subtotal: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
     taxAmount: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
     itemSubtotal: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },

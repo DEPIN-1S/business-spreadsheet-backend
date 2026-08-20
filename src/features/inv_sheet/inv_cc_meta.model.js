@@ -4,7 +4,7 @@ import sequelize from "../../config/db.js";
 /**
  * Stores metadata values per product row (Sub-Spreadsheet View header).
  * One record per inv_row — linked by rowId (unique).
- * Fields: GST, Category, Division, Mfg (manufacturer), Company, Quantity, HSN Code, Rack No
+ * Fields: GST, Category, Division, Mfg (manufacturer), Company, Quantity, HSN Code, Rack No, Composition
  */
 const InvCcMeta = sequelize.define("InvCcMeta", {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
@@ -16,7 +16,8 @@ const InvCcMeta = sequelize.define("InvCcMeta", {
     companyName: { type: DataTypes.STRING(100), allowNull: true, defaultValue: null },   // Company field
     quantity: { type: DataTypes.STRING(100), allowNull: true, defaultValue: null },
     hsnCode: { type: DataTypes.STRING(100), allowNull: true, defaultValue: null },
-    rackNo: { type: DataTypes.STRING(100), allowNull: true, defaultValue: null }
+    rackNo: { type: DataTypes.STRING(100), allowNull: true, defaultValue: null },
+    composition: { type: DataTypes.STRING(500), allowNull: true, defaultValue: null }   // Composition field
 }, { tableName: "inv_cc_meta" });
 
 export default InvCcMeta;

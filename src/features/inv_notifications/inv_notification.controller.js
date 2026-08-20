@@ -54,3 +54,12 @@ export const dismissNotification = async (req, res, next) => {
         res.json({ message: "Notification dismissed" });
     } catch (e) { next(e); }
 };
+
+export const triggerAlertChecks = async (req, res, next) => {
+    try {
+        const { checkInventoryAlerts, checkPendingLedgerAlerts } = await import("./inv_notification.cron.js");
+        await checkInventoryAlerts();
+        await checkPendingLedgerAlerts();
+        res.json({ message: "Alert checks completed successfully" });
+    } catch (e) { next(e); }
+};

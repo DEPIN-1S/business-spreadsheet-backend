@@ -12,7 +12,9 @@ const WholesaleParty = sequelize.define("WholesaleParty", {
     age: { type: DataTypes.INTEGER, allowNull: true },
     contact: { type: DataTypes.STRING(20), allowNull: true },
     email: { type: DataTypes.STRING(150), allowNull: true },
-    address: { type: DataTypes.TEXT, allowNull: true },
+    address: { type: DataTypes.TEXT, allowNull: true },          // legacy / backward-compat
+    billingAddress: { type: DataTypes.TEXT, allowNull: true },
+    shippingAddress: { type: DataTypes.TEXT, allowNull: true },
     createdBy: { type: DataTypes.UUID, allowNull: true },
     isDeleted: { type: DataTypes.BOOLEAN, defaultValue: false }
 }, { tableName: "wholesale_parties" });

@@ -1,3 +1,4 @@
+import { Op } from "sequelize";
 import sequelize from "../../config/db.js";
 import RetailParty from "./retail_party.model.js";
 import WholesaleParty from "./wholesale_party.model.js";
@@ -174,7 +175,7 @@ export const listParties = async (req, res, next) => {
 export const createParty = async (req, res, next) => {
     try {
         const Model = getPartyModel(req.params.type);
-        const { name, contact, email, address, registrationNo, dlNo, gstinNo, panNo, dobYear, age } = req.body;
+        const { name, contact, email, address, billingAddress, shippingAddress, registrationNo, dlNo, gstinNo, panNo, dobYear, age } = req.body;
         if (!name?.trim()) throw new AppError("Party name is required", 422);
 
         const parts = [];
@@ -188,11 +189,17 @@ export const createParty = async (req, res, next) => {
             ? (currentYear - Number(dobYear) + 1)
             : (age ? Number(age) : null);
 
+        // billingAddress takes priority; fall back to legacy address field
+        const effectiveBillingAddress = billingAddress ? String(billingAddress).trim() : (address ? String(address).trim() : null);
+        const effectiveShippingAddress = shippingAddress ? String(shippingAddress).trim() : effectiveBillingAddress;
+
         const party = await Model.create({
             name: name.trim(),
             contact: contact ? String(contact).trim() : null,
             email: email ? String(email).trim() : null,
-            address: address ? String(address).trim() : null,
+            address: effectiveBillingAddress,               // legacy compat
+            billingAddress: effectiveBillingAddress,
+            shippingAddress: effectiveShippingAddress,
             registrationNo: computedRegNo,
             dlNo: dlNo ? String(dlNo).trim() : null,
             gstinNo: gstinNo ? String(gstinNo).trim() : null,
@@ -211,7 +218,7 @@ export const updateParty = async (req, res, next) => {
         const party = await Model.findOne({ where: { id: req.params.id, isDeleted: false } });
         if (!party) throw new AppError("Party not found", 404);
 
-        const { name, contact, email, address, registrationNo, dlNo, gstinNo, panNo, dobYear, age } = req.body;
+        const { name, contact, email, address, billingAddress, shippingAddress, registrationNo, dlNo, gstinNo, panNo, dobYear, age } = req.body;
         if (name !== undefined && !name?.trim()) throw new AppError("Party name is required", 422);
 
         const parts = [];
@@ -230,11 +237,21 @@ export const updateParty = async (req, res, next) => {
             ? (currentYear - Number(finalDobYear) + 1)
             : (finalAge ? Number(finalAge) : null);
 
+        // Resolve effective billing/shipping from new or existing values
+        const effectiveBillingAddress = billingAddress !== undefined
+            ? (billingAddress ? String(billingAddress).trim() : null)
+            : (address !== undefined ? (address ? String(address).trim() : null) : party.billingAddress);
+        const effectiveShippingAddress = shippingAddress !== undefined
+            ? (shippingAddress ? String(shippingAddress).trim() : null)
+            : party.shippingAddress;
+
         await party.update({
             ...(name !== undefined && { name: name.trim() }),
             ...(contact !== undefined && { contact: contact ? String(contact).trim() : null }),
             ...(email !== undefined && { email: email ? String(email).trim() : null }),
-            ...(address !== undefined && { address: address ? String(address).trim() : null }),
+            address: effectiveBillingAddress,               // legacy compat
+            billingAddress: effectiveBillingAddress,
+            shippingAddress: effectiveShippingAddress,
             registrationNo: computedRegNo || null,
             ...(dlNo !== undefined && { dlNo: dlNo ? String(dlNo).trim() : null }),
             ...(gstinNo !== undefined && { gstinNo: gstinNo ? String(gstinNo).trim() : null }),
@@ -323,7 +340,7 @@ export const createInvoice = async (req, res, next) => {
     const t = await sequelize.transaction();
     try {
         const {
-            type, partyId, partyType, partyName, invoiceDate,
+            type, partyId, partyType, partyName, billingAddress, shippingAddress, invoiceDate,
             items = [], subtotal, taxAmount, grandTotal,
             itemSubtotal, discountAmount, additionalChargesAmount, additionalCharges, roundOffAmount,
             paymentMethod, paymentStatus, pendingAmount,
@@ -337,6 +354,8 @@ export const createInvoice = async (req, res, next) => {
 
         const invoice = await Invoice.create({
             invoiceNo, type, partyId, partyType, partyName,
+            billingAddress: billingAddress || null,
+            shippingAddress: shippingAddress || null,
             invoiceDate, subtotal: subtotal || 0,
             taxAmount: taxAmount || 0, grandTotal: grandTotal || 0,
             itemSubtotal: itemSubtotal || 0,
@@ -361,6 +380,7 @@ export const createInvoice = async (req, res, next) => {
                 price: item.price || 0,
                 mrp: item.mrp || 0,
                 gstPercent: item.gstPercent || item.gst || 5,
+                disPercent: item.disPercent || item.marginPercent || item.discount || 0,
                 expiry: item.expiry || item.expDate || '',
                 hsnCode: item.hsnCode || item.hsn || '',
                 isDeleted: false
@@ -417,6 +437,28 @@ export const getInvoice = async (req, res, next) => {
         if (!invoice) throw new AppError("Invoice not found", 404);
 
         const plainInvoice = invoice.get({ plain: true });
+
+        // Backfill MRP and Discount/Margin from inventory for items
+        if (Array.isArray(plainInvoice.items)) {
+            for (const item of plainInvoice.items) {
+                // Backfill MRP
+                if ((!item.mrp || parseFloat(item.mrp) === 0) && item.invCcRowId) {
+                    try {
+                        const mrpCell = await InvCcCell.findOne({
+                            where: {
+                                ccRowId: item.invCcRowId,
+                                columnId: { [Op.in]: ["col-cc-wholesale-mrp", "col-cc-mrp"] }
+                            },
+                            order: [["columnId", "DESC"]]
+                        });
+                        if (mrpCell && mrpCell.rawValue) {
+                            item.mrp = parseFloat(mrpCell.rawValue) || 0;
+                        }
+                    } catch (_) { /* ignore */ }
+                }
+            }
+        }
+
         if (plainInvoice.partyId && plainInvoice.partyType) {
             try {
                 const PartyModel = getPartyModel(plainInvoice.partyType);
@@ -431,6 +473,7 @@ export const getInvoice = async (req, res, next) => {
         res.json({ data: plainInvoice });
     } catch (e) { next(e); }
 };
+
 
 export const updateInvoice = async (req, res, next) => {
     const t = await sequelize.transaction();
@@ -470,6 +513,7 @@ export const updateInvoice = async (req, res, next) => {
                     price: item.price || 0,
                     mrp: item.mrp || 0,
                     gstPercent: item.gstPercent || item.gst || 5,
+                    disPercent: item.disPercent || item.marginPercent || item.discount || 0,
                     expiry: item.expiry || item.expDate || '',
                     hsnCode: item.hsnCode || item.hsn || '',
                     isDeleted: false

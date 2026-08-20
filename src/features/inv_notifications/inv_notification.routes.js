@@ -5,7 +5,8 @@ import {
     getUnreadCount,
     markAsRead,
     markAllAsRead,
-    dismissNotification
+    dismissNotification,
+    triggerAlertChecks
 } from "./inv_notification.controller.js";
 
 const router = express.Router();
@@ -13,6 +14,7 @@ router.use(protect());
 
 router.get("/", listNotifications);
 router.get("/count", getUnreadCount);
+router.post("/trigger", triggerAlertChecks);
 router.patch("/read-all", markAllAsRead);
 router.patch("/:id/read", markAsRead);
 router.patch("/:id/dismiss", dismissNotification);
