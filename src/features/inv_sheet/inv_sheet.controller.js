@@ -318,6 +318,14 @@ export const deleteSheet = async (req, res, next) => {
         const sheet = await InvSpreadsheet.findOne({ where: { id: req.params.id, isDeleted: false } });
         if (!sheet) throw new AppError("Sheet not found", 404);
         await sheet.update({ isDeleted: true });
+
+        const rows = await InvRow.findAll({ where: { spreadsheetId: req.params.id } });
+        const rowIds = rows.map(r => r.id);
+        if (rowIds.length > 0) {
+            await InvRow.update({ isDeleted: true }, { where: { spreadsheetId: req.params.id } });
+            await InvCcRow.update({ isDeleted: true }, { where: { parentRowId: rowIds } });
+        }
+
         res.json({ message: "Sheet deleted" });
     } catch (e) { next(e); }
 };
@@ -350,6 +358,7 @@ export const deleteRow = async (req, res, next) => {
         const row = await InvRow.findOne({ where: { id: req.params.rowId, spreadsheetId: req.params.id, isDeleted: false } });
         if (!row) throw new AppError("Row not found", 404);
         await row.update({ isDeleted: true });
+        await InvCcRow.update({ isDeleted: true }, { where: { parentRowId: row.id } });
         res.json({ message: "Row deleted" });
     } catch (e) { next(e); }
 };
@@ -668,9 +677,16 @@ export const listAllBatches = async (req, res, next) => {
                 { model: InvCcCell, as: "cells" },
                 {
                     model: InvRow,
+                    where: { isDeleted: false },
+                    required: true,
                     include: [
                         { model: InvCell, as: "cells" },
-                        { model: InvCcMeta, as: "ccMeta", required: false }
+                        { model: InvCcMeta, as: "ccMeta", required: false },
+                        {
+                            model: InvSpreadsheet,
+                            where: { isDeleted: false },
+                            required: true
+                        }
                     ]
                 }
             ]
@@ -681,33 +697,47 @@ export const listAllBatches = async (req, res, next) => {
             return cell ? cell.rawValue : "";
         };
 
-        const result = ccRows.map(row => {
-            const cells = row.cells || [];
-            const parentRow = row.InvRow;
-            const parentCells = parentRow ? (parentRow.cells || []) : [];
+        const result = ccRows
+            .filter(row => row.InvRow && !row.InvRow.isDeleted && row.InvRow.InvSpreadsheet && !row.InvRow.InvSpreadsheet.isDeleted)
+            .map(row => {
+                const cells = row.cells || [];
+                const parentRow = row.InvRow;
+                const parentCells = parentRow ? (parentRow.cells || []) : [];
 
-            const stockStr = getCellValue(cells, "col-cc-quantity-stock");
-            const retailPriceStr = getCellValue(cells, "col-cc-retail-selling-rate");
-            const wholesalePriceStr = getCellValue(cells, "col-cc-wholesale-selling-rate");
-            const mrpStr = getCellValue(cells, "col-cc-wholesale-mrp") || getCellValue(cells, "col-cc-mrp");
-            const discountStr = getCellValue(cells, "col-cc-discount");
-            const wholesaleMarginStr = getCellValue(cells, "col-cc-wholesale-margin");
+                const productName = getCellValue(parentCells, "col-product-name");
+                const batchVal = getCellValue(cells, "col-cc-batch");
 
-            return {
-                ccRowId: row.id,
-                name: getCellValue(parentCells, "col-product-name") || "Unnamed Product",
-                batch: getCellValue(cells, "col-cc-batch") || "No Batch",
-                expiry: getCellValue(cells, "col-cc-expiry-date") || "No Expiry",
-                stock: stockStr ? parseFloat(stockStr) : 0,
-                retailPrice: retailPriceStr ? parseFloat(retailPriceStr) : 0,
-                wholesalePrice: wholesalePriceStr ? parseFloat(wholesalePriceStr) : 0,
-                mrp: mrpStr ? parseFloat(mrpStr) : 0,
-                discount: discountStr ? parseFloat(discountStr) : 0,
-                wholesaleMargin: wholesaleMarginStr ? parseFloat(wholesaleMarginStr) : 0,
-                category: getCellValue(parentCells, "col-composition") || "General",
-                rackNo: (row.InvRow?.ccMeta?.rackNo) || getCellValue(parentCells, "col-rack-no") || ""
-            };
-        });
+                // Skip rows with no product name or no batch
+                if (!productName || !batchVal) return null;
+
+                const stockStr = getCellValue(cells, "col-cc-quantity-stock");
+                const retailPriceStr = getCellValue(cells, "col-cc-retail-selling-rate");
+                const wholesalePriceStr = getCellValue(cells, "col-cc-wholesale-selling-rate");
+                const mrpStr = getCellValue(cells, "col-cc-wholesale-mrp") || getCellValue(cells, "col-cc-mrp");
+                const discountStr = getCellValue(cells, "col-cc-discount");
+                const wholesaleMarginStr = getCellValue(cells, "col-cc-wholesale-margin");
+
+                // Use actual category from ccMeta, fallback to composition, then 'General'
+                const category = row.InvRow?.ccMeta?.category
+                    || getCellValue(parentCells, "col-composition")
+                    || "General";
+
+                return {
+                    ccRowId: row.id,
+                    name: productName || "Unnamed Product",
+                    batch: batchVal || "No Batch",
+                    expiry: getCellValue(cells, "col-cc-expiry-date") || "No Expiry",
+                    stock: stockStr ? parseFloat(stockStr) : 0,
+                    retailPrice: retailPriceStr ? parseFloat(retailPriceStr) : 0,
+                    wholesalePrice: wholesalePriceStr ? parseFloat(wholesalePriceStr) : 0,
+                    mrp: mrpStr ? parseFloat(mrpStr) : 0,
+                    discount: discountStr ? parseFloat(discountStr) : 0,
+                    wholesaleMargin: wholesaleMarginStr ? parseFloat(wholesaleMarginStr) : 0,
+                    category,
+                    rackNo: (row.InvRow?.ccMeta?.rackNo) || getCellValue(parentCells, "col-rack-no") || ""
+                };
+            })
+            .filter(Boolean); // remove null entries from skipped rows
 
         res.json({ data: result });
     } catch (e) { next(e); }

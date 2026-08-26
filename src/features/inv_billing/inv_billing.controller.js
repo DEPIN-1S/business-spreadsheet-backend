@@ -109,7 +109,7 @@ async function adjustBatchStock(ccRowId, qtyDelta, transaction) {
     if (!stockCell) return;
     const currentQty = parseFloat(stockCell.rawValue || 0);
     const newQty = Math.max(0, currentQty + qtyDelta);
-    await stockCell.update({ rawValue: String(newQty) }, { transaction });
+    await stockCell.update({ rawValue: String(newQty), computedValue: String(newQty) }, { transaction });
     await autoUpdateBatchStatus(ccRowId, newQty, transaction);
 
     // Sync parent product row main cell
@@ -469,6 +469,10 @@ export const getInvoice = async (req, res, next) => {
             } catch (err) {
                 console.error("Error populating party for invoice:", err);
             }
+        }
+        // Ensure additionalCharges is always a parsed array (Sequelize can return JSON fields as strings)
+        if (plainInvoice.additionalCharges && typeof plainInvoice.additionalCharges === 'string') {
+            try { plainInvoice.additionalCharges = JSON.parse(plainInvoice.additionalCharges); } catch { plainInvoice.additionalCharges = []; }
         }
         res.json({ data: plainInvoice });
     } catch (e) { next(e); }
