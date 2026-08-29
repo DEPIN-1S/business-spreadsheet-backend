@@ -6,9 +6,9 @@ import nodemailer from "nodemailer";
 const getTransporter = () => {
     const host = process.env.SMTP_HOST || "smtp.gmail.com";
     const port = parseInt(process.env.SMTP_PORT || "587", 10);
-    const secure = process.env.SMTP_SECURE === "true";
+    const secure = process.env.SMTP_SECURE === "true" || port === 465;
     const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
+    const pass = (process.env.SMTP_PASS || "").replace(/^["']|["']$/g, "");
 
     if (!user || !pass) {
         return null;
@@ -213,4 +213,95 @@ export const sendPendingPaymentEmail = async ({
     }
 };
 
-export default { sendStockAlertEmail, sendPendingPaymentEmail };
+/**
+ * Send an email notification when a new product is created with its initial stock/qty
+ */
+export const sendNewProductEmail = async ({
+    productName,
+    rackNo,
+    batchName,
+    initialQty,
+    mrp,
+    purchaseRate,
+    recipientEmail
+}) => {
+    try {
+        const transporter = getTransporter();
+        const to = recipientEmail || process.env.ALERT_EMAIL_RECIPIENT || process.env.SA_EMAIL;
+
+        if (!transporter) {
+            console.log(`[EmailService] SMTP credentials not set. Skipping new product email for: "${productName}".`);
+            return false;
+        }
+
+        if (!to) {
+            console.log(`[EmailService] No recipient email configured. Skipping new product email for: "${productName}".`);
+            return false;
+        }
+
+        const from = process.env.SMTP_FROM || `"Inventory stocks Alerts" <${process.env.SMTP_USER}>`;
+        const title = `New Product Added: ${productName}`;
+
+        const htmlContent = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                <div style="background-color: #0284c7; color: white; padding: 14px 20px; font-weight: bold; border-radius: 6px 6px 0 0; font-size: 16px;">
+                    ✨ ${title}
+                </div>
+                <div style="padding: 20px; background-color: #ffffff;">
+                    <p style="font-size: 14px; color: #374151; margin-bottom: 16px;">
+                        A new product has been successfully registered in your inventory spreadsheet.
+                    </p>
+                    <table style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px;">
+                        <tr style="border-bottom: 1px solid #f3f4f6;">
+                            <td style="padding: 10px 8px; font-weight: bold; color: #4b5563; width: 40%;">Product Name:</td>
+                            <td style="padding: 10px 8px; color: #111827; font-weight: bold;">${productName || 'N/A'}</td>
+                        </tr>
+                        ${rackNo ? `
+                        <tr style="border-bottom: 1px solid #f3f4f6;">
+                            <td style="padding: 10px 8px; font-weight: bold; color: #4b5563;">Rack No:</td>
+                            <td style="padding: 10px 8px; color: #111827;">${rackNo}</td>
+                        </tr>` : ''}
+                        ${batchName ? `
+                        <tr style="border-bottom: 1px solid #f3f4f6;">
+                            <td style="padding: 10px 8px; font-weight: bold; color: #4b5563;">Initial Batch:</td>
+                            <td style="padding: 10px 8px; color: #111827;">${batchName}</td>
+                        </tr>` : ''}
+                        <tr style="border-bottom: 1px solid #f3f4f6; background-color: #f0fdf4;">
+                            <td style="padding: 10px 8px; font-weight: bold; color: #166534;">Initial Stock / Qty:</td>
+                            <td style="padding: 10px 8px; color: #15803d; font-weight: bold; font-size: 14px;">${initialQty !== undefined ? initialQty : '0'} units</td>
+                        </tr>
+                        ${purchaseRate ? `
+                        <tr style="border-bottom: 1px solid #f3f4f6;">
+                            <td style="padding: 10px 8px; font-weight: bold; color: #4b5563;">Purchase Rate:</td>
+                            <td style="padding: 10px 8px; color: #111827;">₹${Number(purchaseRate).toFixed(2)}</td>
+                        </tr>` : ''}
+                        ${mrp ? `
+                        <tr style="border-bottom: 1px solid #f3f4f6;">
+                            <td style="padding: 10px 8px; font-weight: bold; color: #4b5563;">MRP:</td>
+                            <td style="padding: 10px 8px; color: #111827;">₹${Number(mrp).toFixed(2)}</td>
+                        </tr>` : ''}
+                    </table>
+                </div>
+                <div style="padding: 12px 20px; background-color: #f9fafb; font-size: 11px; color: #9ca3af; text-align: center; border-radius: 0 0 6px 6px;">
+                    This is an automated product notification from Datsheets.
+                </div>
+            </div>
+        `;
+
+        const info = await transporter.sendMail({
+            from,
+            to,
+            subject: `[INVENTORY] New Product Created: ${productName} (Qty: ${initialQty || 0})`,
+            text: `${title}\n\nProduct: ${productName}\nRack: ${rackNo || 'N/A'}\nBatch: ${batchName || 'N/A'}\nInitial Stock: ${initialQty || 0}`,
+            html: htmlContent
+        });
+
+        console.log(`[EmailService] New product alert email sent to ${to}. MessageId: ${info.messageId}`);
+        return true;
+    } catch (error) {
+        console.error(`[EmailService] Failed to send new product email for "${productName}":`, error.message);
+        return false;
+    }
+};
+
+export default { sendStockAlertEmail, sendPendingPaymentEmail, sendNewProductEmail };

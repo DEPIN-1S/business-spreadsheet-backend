@@ -240,7 +240,7 @@ export const createSheet = async (req, res, next) => {
         // Pre-create 5 empty rows with cells for the new sheet
         const defaultColIds = [
             "col-product-image", "col-product-name", "col-retail-inventory",
-            "col-composition", "col-company-name", "col-rack-no"
+            "col-composition", "col-company-name", "col-rack-no", "col-manufacturer"
         ];
         for (let i = 0; i < 5; i++) {
             const row = await InvRow.create({ spreadsheetId: sheet.id, orderIndex: i });
@@ -275,6 +275,20 @@ export const getSheet = async (req, res, next) => {
             const rows = sheet.rows || [];
             for (const r of rows) {
                 await syncParentInventory(r.id);
+                if (r.ccMeta) {
+                    if (r.ccMeta.rackNo) {
+                        await InvCell.upsert({ rowId: r.id, columnId: "col-rack-no", rawValue: r.ccMeta.rackNo, computedValue: r.ccMeta.rackNo });
+                    }
+                    if (r.ccMeta.companyName) {
+                        await InvCell.upsert({ rowId: r.id, columnId: "col-company-name", rawValue: r.ccMeta.companyName, computedValue: r.ccMeta.companyName });
+                    }
+                    if (r.ccMeta.composition) {
+                        await InvCell.upsert({ rowId: r.id, columnId: "col-composition", rawValue: r.ccMeta.composition, computedValue: r.ccMeta.composition });
+                    }
+                    if (r.ccMeta.manufacturer) {
+                        await InvCell.upsert({ rowId: r.id, columnId: "col-manufacturer", rawValue: r.ccMeta.manufacturer, computedValue: r.ccMeta.manufacturer });
+                    }
+                }
             }
             // Re-fetch sheet after sync
             const updatedSheet = await InvSpreadsheet.findOne({
@@ -342,7 +356,7 @@ export const addRow = async (req, res, next) => {
         const row = await InvRow.create({ spreadsheetId: req.params.id, orderIndex: maxOrder + 1 });
         const defaultColIds = [
             "col-product-image", "col-product-name", "col-retail-inventory",
-            "col-composition", "col-company-name", "col-rack-no"
+            "col-composition", "col-company-name", "col-rack-no", "col-manufacturer"
         ];
         const cells = defaultColIds.map(columnId => ({
             rowId: row.id, columnId, rawValue: "", computedValue: ""
@@ -388,11 +402,30 @@ export const updateCells = async (req, res, next) => {
             }
             if (c.columnId === "col-composition" && c.rawValue !== undefined) {
                 let meta = await InvCcMeta.findOne({ where: { rowId: req.params.rowId } });
-                if (meta) await meta.update({ category: c.rawValue ?? "" });
-                else await InvCcMeta.create({ rowId: req.params.rowId, category: c.rawValue ?? "" });
+                if (meta) await meta.update({ composition: c.rawValue ?? "", category: c.rawValue ?? "" });
+                else await InvCcMeta.create({ rowId: req.params.rowId, composition: c.rawValue ?? "", category: c.rawValue ?? "" });
+            }
+            if (c.columnId === "col-manufacturer" && c.rawValue !== undefined) {
+                let meta = await InvCcMeta.findOne({ where: { rowId: req.params.rowId } });
+                if (meta) await meta.update({ manufacturer: c.rawValue ?? "" });
+                else await InvCcMeta.create({ rowId: req.params.rowId, manufacturer: c.rawValue ?? "" });
             }
         }
         res.json({ message: "Cells updated" });
+    } catch (e) { next(e); }
+};
+
+export const updateRowStyle = async (req, res, next) => {
+    try {
+        const row = await InvRow.findOne({ where: { id: req.params.rowId, spreadsheetId: req.params.id, isDeleted: false } });
+        if (!row) throw new AppError("Row not found", 404);
+        let currentStyles = row.styles || {};
+        if (typeof currentStyles === "string") {
+            try { currentStyles = JSON.parse(currentStyles); } catch { currentStyles = {}; }
+        }
+        const updatedStyles = { ...currentStyles, ...(req.body.styles || {}) };
+        await row.update({ styles: updatedStyles });
+        res.json({ data: row, message: "Row styles updated" });
     } catch (e) { next(e); }
 };
 
@@ -417,9 +450,9 @@ export const getCcMeta = async (req, res, next) => {
         const result = {
             rowId: req.params.rowId,
             gst: meta?.gst || "",
-            category: meta?.category || getCellValue(parentCells, "col-composition") || "",
+            category: meta?.category || meta?.composition || getCellValue(parentCells, "col-composition") || "",
             division: meta?.division || "",
-            manufacturer: meta?.manufacturer || "",
+            manufacturer: meta?.manufacturer || getCellValue(parentCells, "col-manufacturer") || "",
             companyName: meta?.companyName || getCellValue(parentCells, "col-company-name") || "",
             quantity: meta?.quantity || "",
             hsnCode: meta?.hsnCode || "",
@@ -486,6 +519,14 @@ export const updateCcMeta = async (req, res, next) => {
                 columnId: "col-composition",
                 rawValue: composition ?? "",
                 computedValue: composition ?? ""
+            });
+        }
+        if (manufacturer !== undefined) {
+            await InvCell.upsert({
+                rowId: req.params.rowId,
+                columnId: "col-manufacturer",
+                rawValue: manufacturer ?? "",
+                computedValue: manufacturer ?? ""
             });
         }
 
@@ -669,6 +710,20 @@ export const updateCcCells = async (req, res, next) => {
     }
 };
 
+export const updateCcRowStyle = async (req, res, next) => {
+    try {
+        const ccRow = await InvCcRow.findOne({ where: { id: req.params.ccRowId, parentRowId: req.params.rowId, isDeleted: false } });
+        if (!ccRow) throw new AppError("CC row not found", 404);
+        let currentStyles = ccRow.styles || {};
+        if (typeof currentStyles === "string") {
+            try { currentStyles = JSON.parse(currentStyles); } catch { currentStyles = {}; }
+        }
+        const updatedStyles = { ...currentStyles, ...(req.body.styles || {}) };
+        await ccRow.update({ styles: updatedStyles });
+        res.json({ data: ccRow, message: "CC Row styles updated" });
+    } catch (e) { next(e); }
+};
+
 export const listAllBatches = async (req, res, next) => {
     try {
         const ccRows = await InvCcRow.findAll({
@@ -801,7 +856,8 @@ export const copyRow = async (req, res, next) => {
                 companyName: originalMeta.companyName,
                 quantity: originalMeta.quantity,
                 hsnCode: originalMeta.hsnCode,
-                rackNo: originalMeta.rackNo
+                rackNo: originalMeta.rackNo,
+                composition: originalMeta.composition
             }, { transaction: t });
         }
 

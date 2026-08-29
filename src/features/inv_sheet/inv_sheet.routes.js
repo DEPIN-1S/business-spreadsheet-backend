@@ -3,9 +3,9 @@ import { protect } from "../../middleware/auth.js";
 import {
     listFolders, createFolder, updateFolder, deleteFolder,
     listSheets, createSheet, getSheet, updateSheet, deleteSheet,
-    addRow, deleteRow, updateCells, copyRow,
+    addRow, deleteRow, updateCells, copyRow, updateRowStyle,
     getCcMeta, updateCcMeta,
-    listCcRows, addCcRow, deleteCcRow, updateCcCells, copyCcRow,
+    listCcRows, addCcRow, deleteCcRow, updateCcCells, copyCcRow, updateCcRowStyle,
     listAllBatches
 } from "./inv_sheet.controller.js";
 
@@ -32,6 +32,7 @@ sheetRouter.post("/:id/rows", addRow);
 sheetRouter.post("/:id/rows/:rowId/copy", copyRow);
 sheetRouter.delete("/:id/rows/:rowId", deleteRow);
 sheetRouter.put("/:id/rows/:rowId/cells", updateCells);
+sheetRouter.patch("/:id/rows/:rowId/style", updateRowStyle);
 
 // CC Meta (6 dropdowns per product row)
 sheetRouter.get("/:id/rows/:rowId/cc-meta", getCcMeta);
@@ -43,5 +44,6 @@ sheetRouter.post("/:id/rows/:rowId/cc-rows", addCcRow);
 sheetRouter.post("/:id/rows/:rowId/cc-rows/:ccRowId/copy", copyCcRow);
 sheetRouter.delete("/:id/rows/:rowId/cc-rows/:ccRowId", deleteCcRow);
 sheetRouter.put("/:id/rows/:rowId/cc-rows/:ccRowId/cells", updateCcCells);
+sheetRouter.patch("/:id/rows/:rowId/cc-rows/:ccRowId/style", updateCcRowStyle);
 
 export { folderRouter, sheetRouter };

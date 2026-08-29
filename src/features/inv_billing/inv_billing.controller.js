@@ -10,7 +10,7 @@ import InvCcRow from "../inv_sheet/inv_cc_row.model.js";
 import InvRow from "../inv_sheet/inv_row.model.js";
 import InvCell from "../inv_sheet/inv_cell.model.js";
 import InvNotification from "../inv_notifications/inv_notification.model.js";
-import { sendStockAlertEmail } from "../../utils/emailService.js";
+import { sendStockAlertEmail, sendPendingPaymentEmail } from "../../utils/emailService.js";
 import AppError from "../../utils/AppError.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -410,6 +410,21 @@ export const createInvoice = async (req, res, next) => {
         }, { transaction: t });
 
         await t.commit();
+
+        if (["Unpaid", "Partially Paid"].includes(paymentStatus) || ledgerPending > 0) {
+            sendPendingPaymentEmail({
+                invoiceNo,
+                partyName: partyName || "Walk-in Customer",
+                partyContact: "",
+                partyEmail: "",
+                invoiceDate,
+                paymentStatus: paymentStatus || "Unpaid",
+                grandTotal: grandTotal || 0,
+                paidAmount: Math.max(0, (grandTotal || 0) - ledgerPending),
+                pendingAmount: ledgerPending
+            }).catch(err => console.error("[Auto Pending Payment Email Error]", err));
+        }
+
         const fullInvoice = await Invoice.findByPk(invoice.id, {
             include: [{ model: InvoiceItem, as: "items" }]
         });

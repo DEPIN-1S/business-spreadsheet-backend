@@ -7,7 +7,9 @@
     "start": "node src/spreadsheet.js",
     "start:cluster": "pm2 start src/spreadsheet.js -i max",
     "seed:superadmin": "node src/seeders/createSuperAdmin.js",
-    "migrate:time": "node migrate_time_enum.js"
+    "script:check-perms": "node scripts/check_perms.js",
+    "script:fix-perms": "node scripts/fix_empty_perms.js",
+    "script:test-notifications": "node scripts/test_send_notifications.js"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
