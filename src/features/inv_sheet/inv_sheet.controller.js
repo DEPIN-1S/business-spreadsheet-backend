@@ -318,10 +318,13 @@ export const updateSheet = async (req, res, next) => {
         const sheet = await InvSpreadsheet.findOne({ where: { id: req.params.id, isDeleted: false } });
         if (!sheet) throw new AppError("Sheet not found", 404);
         const { name, folderId, settings } = req.body;
+        const nextSettings = settings
+            ? { ...(sheet.settings || {}), ...settings }
+            : sheet.settings;
         await sheet.update({
             ...(name ? { name: name.trim() } : {}),
             ...(folderId !== undefined ? { folderId: folderId || null } : {}),
-            ...(settings ? { settings } : {})
+            ...(settings ? { settings: nextSettings } : {})
         });
         res.json({ data: sheet, message: "Sheet updated" });
     } catch (e) { next(e); }
@@ -758,6 +761,10 @@ export const listAllBatches = async (req, res, next) => {
                 const cells = row.cells || [];
                 const parentRow = row.InvRow;
                 const parentCells = parentRow ? (parentRow.cells || []) : [];
+                const ccMeta = parentRow?.ccMeta || parentRow?.InvCcMeta || null;
+                const gstRaw = ccMeta?.gst || "";
+                const gstMatch = String(gstRaw).match(/(\d+(?:\.\d+)?)/);
+                const gstPercent = gstMatch ? Number(gstMatch[1]) : 0;
 
                 const productName = getCellValue(parentCells, "col-product-name");
                 const batchVal = getCellValue(cells, "col-cc-batch");
@@ -773,7 +780,7 @@ export const listAllBatches = async (req, res, next) => {
                 const wholesaleMarginStr = getCellValue(cells, "col-cc-wholesale-margin");
 
                 // Use actual category from ccMeta, fallback to composition, then 'General'
-                const category = row.InvRow?.ccMeta?.category
+                const category = ccMeta?.category
                     || getCellValue(parentCells, "col-composition")
                     || "General";
 
@@ -789,7 +796,9 @@ export const listAllBatches = async (req, res, next) => {
                     discount: discountStr ? parseFloat(discountStr) : 0,
                     wholesaleMargin: wholesaleMarginStr ? parseFloat(wholesaleMarginStr) : 0,
                     category,
-                    rackNo: (row.InvRow?.ccMeta?.rackNo) || getCellValue(parentCells, "col-rack-no") || ""
+                    rackNo: ccMeta?.rackNo || getCellValue(parentCells, "col-rack-no") || "",
+                    gst: gstRaw,
+                    gstPercent
                 };
             })
             .filter(Boolean); // remove null entries from skipped rows
