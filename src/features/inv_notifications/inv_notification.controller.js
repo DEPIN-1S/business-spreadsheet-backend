@@ -14,7 +14,16 @@ export const listNotifications = async (req, res, next) => {
             where,
             order: [["createdAt", "DESC"]]
         });
-        res.json({ data: notifications });
+        const data = notifications.map((row) => {
+            const n = row.toJSON();
+            return {
+                ...n,
+                createdAt: n.createdAt || n.created_at || null,
+                expiryDate: n.expiryDate || n.expiry_date || null,
+                invoiceDate: n.invoiceDate || n.invoice_date || null
+            };
+        });
+        res.json({ data });
     } catch (e) { next(e); }
 };
 

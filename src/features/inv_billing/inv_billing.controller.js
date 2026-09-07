@@ -66,6 +66,7 @@ async function autoUpdateBatchStatus(ccRowId, currentQty, transaction) {
             };
             const productName = getVal(parentCells, "col-product-name") || "Unknown Product";
             const batchName = getVal(cells, "col-cc-batch") || "Unknown Batch";
+            const expiryRaw = getVal(cells, "col-cc-expiry-date") || null;
             const type = status === "Out of Stock" ? "out_of_stock" : "low_stock";
             const title = status === "Out of Stock" ? `Out of Stock (0 Left): ${productName}` : `Low Stock (${currentQty} Left): ${productName}`;
             const message = status === "Out of Stock"
@@ -85,7 +86,8 @@ async function autoUpdateBatchStatus(ccRowId, currentQty, transaction) {
                     invRowId: parentRow ? parentRow.id : null,
                     productName,
                     batchName,
-                    currentQty
+                    currentQty,
+                    expiryDate: expiryRaw || null
                 }, { transaction });
 
                 sendStockAlertEmail({
@@ -97,6 +99,37 @@ async function autoUpdateBatchStatus(ccRowId, currentQty, transaction) {
                     currentQty
                 }).catch(err => console.error("[EmailService Error]", err));
             }
+        }
+    }
+}
+
+async function getBatchStock(ccRowId, transaction) {
+    const stockCell = await InvCcCell.findOne({
+        where: { ccRowId, columnId: "col-cc-quantity-stock" },
+        transaction
+    });
+    const qty = parseFloat(stockCell?.rawValue || 0);
+    return Number.isFinite(qty) ? qty : 0;
+}
+
+async function assertItemsHaveStock(items = [], transaction) {
+    for (const item of items) {
+        if (!item?.invCcRowId) continue;
+        const requested = parseFloat(item.qty || 0);
+        const name = item.description || "item";
+        const batch = item.batch ? ` (batch ${item.batch})` : "";
+        if (!Number.isFinite(requested) || requested <= 0) {
+            throw new AppError(`Quantity must be greater than 0 for "${name}"${batch}.`, 422);
+        }
+        const available = await getBatchStock(item.invCcRowId, transaction);
+        if (available <= 0) {
+            throw new AppError(`"${name}"${batch} is out of stock and cannot be billed.`, 422);
+        }
+        if (requested > available) {
+            throw new AppError(
+                `Insufficient stock for "${name}"${batch}. Available: ${available}, requested: ${requested}.`,
+                422
+            );
         }
     }
 }
@@ -387,6 +420,7 @@ export const createInvoice = async (req, res, next) => {
             }));
             await InvoiceItem.bulkCreate(itemRows, { transaction: t });
 
+            await assertItemsHaveStock(items, t);
             for (const item of items) {
                 if (item.invCcRowId) {
                     await adjustBatchStock(item.invCcRowId, -parseFloat(item.qty || 0), t);
@@ -539,6 +573,7 @@ export const updateInvoice = async (req, res, next) => {
                 }));
                 await InvoiceItem.bulkCreate(itemRows, { transaction: t });
 
+                await assertItemsHaveStock(items, t);
                 for (const item of items) {
                     if (item.invCcRowId) {
                         await adjustBatchStock(item.invCcRowId, -parseFloat(item.qty || 0), t);

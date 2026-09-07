@@ -25,7 +25,8 @@ const InvNotification = sequelize.define("InvNotification", {
     pendingAmount: { type: DataTypes.DECIMAL(15, 2), allowNull: true },
     paymentStatus: { type: DataTypes.STRING(50), allowNull: true },
     isRead: { type: DataTypes.BOOLEAN, defaultValue: false },
-    isDismissed: { type: DataTypes.BOOLEAN, defaultValue: false }
-}, { tableName: "inv_notifications" });
+    isDismissed: { type: DataTypes.BOOLEAN, defaultValue: false },
+    invoiceDate: { type: DataTypes.DATEONLY, allowNull: true }
+}, { tableName: "inv_notifications", timestamps: true });
 
 export default InvNotification;

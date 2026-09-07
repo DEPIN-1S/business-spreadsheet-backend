@@ -16,6 +16,24 @@ const getCellValue = (cells, colId) => {
     return cell ? cell.rawValue : "";
 };
 
+const parseExpiryDateOnly = (raw) => {
+    if (!raw) return null;
+    const str = String(raw).trim();
+    if (!str || str.toLowerCase() === "no expiry") return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+    if (/^\d{4}-\d{2}$/.test(str)) {
+        const [y, m] = str.split("-").map(Number);
+        const lastDay = new Date(y, m, 0).getDate();
+        return `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+    }
+    const d = new Date(str);
+    if (Number.isNaN(d.getTime())) return null;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+};
+
 export const checkInventoryAlerts = async () => {
     console.log("[Inventory Cron] Running daily alert checks...");
     try {
@@ -45,6 +63,7 @@ export const checkInventoryAlerts = async () => {
             const qty = qtyStr === "" ? 0 : parseFloat(qtyStr);
             const notifiedStr = getCellValue(cells, "col-cc-quantity-notified");
             const notifiedQty = notifiedStr === "" ? 0 : parseFloat(notifiedStr);
+            const expiryDate = parseExpiryDateOnly(getCellValue(cells, "col-cc-expiry-date"));
 
             // Stock checks
             if (qty <= 0) {
@@ -68,7 +87,8 @@ export const checkInventoryAlerts = async () => {
                         invRowId: parentRow ? parentRow.id : null,
                         productName,
                         batchName,
-                        currentQty: 0
+                        currentQty: 0,
+                        expiryDate
                     });
                     sendStockAlertEmail({ type: "out_of_stock", title, message, productName, batchName, currentQty: 0 }).catch(err => console.error("[Cron Email Error]", err));
                 }
@@ -93,9 +113,40 @@ export const checkInventoryAlerts = async () => {
                         invRowId: parentRow ? parentRow.id : null,
                         productName,
                         batchName,
-                        currentQty: qty
+                        currentQty: qty,
+                        expiryDate
                     });
                     sendStockAlertEmail({ type: "low_stock", title, message, productName, batchName, currentQty: qty }).catch(err => console.error("[Cron Email Error]", err));
+                }
+            }
+
+            if (expiryDate) {
+                const expiry = new Date(`${expiryDate}T23:59:59`);
+                if (!Number.isNaN(expiry.getTime()) && expiry >= today && expiry <= alertThresholdDate) {
+                    const existingExpiry = await InvNotification.findOne({
+                        where: {
+                            invCcRowId: batch.id,
+                            type: "expiry_alert",
+                            isRead: false,
+                            isDismissed: false
+                        }
+                    });
+                    if (!existingExpiry) {
+                        const title = `Expiring soon: ${productName}`;
+                        const message = `Batch "${batchName}" expires on ${expiryDate}.`;
+                        await InvNotification.create({
+                            type: "expiry_alert",
+                            title,
+                            message,
+                            invCcRowId: batch.id,
+                            invRowId: parentRow ? parentRow.id : null,
+                            productName,
+                            batchName,
+                            currentQty: qty,
+                            expiryDate
+                        });
+                        sendStockAlertEmail({ type: "expiry_alert", title, message, productName, batchName, currentQty: qty }).catch(err => console.error("[Cron Email Error]", err));
+                    }
                 }
             }
         }
@@ -165,6 +216,7 @@ export const checkPendingLedgerAlerts = async () => {
                     message,
                     invoiceId: inv.id,
                     invoiceNo: inv.invoiceNo,
+                    invoiceDate: inv.invoiceDate || null,
                     partyName,
                     partyContact,
                     grandTotal,

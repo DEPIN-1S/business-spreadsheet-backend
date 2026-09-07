@@ -127,6 +127,7 @@ async function syncCcRowStatusAndNotification(ccRowId, transaction) {
             };
             const productName = getVal(parentCells, "col-product-name") || "Unknown Product";
             const batchName = getVal(cells, "col-cc-batch") || "Unknown Batch";
+            const expiryRaw = getVal(cells, "col-cc-expiry-date") || null;
             const type = status === "Out of Stock" ? "out_of_stock" : "low_stock";
             const title = status === "Out of Stock" ? `Out of Stock: ${productName}` : `Low Stock: ${productName}`;
             const message = status === "Out of Stock"
@@ -146,7 +147,8 @@ async function syncCcRowStatusAndNotification(ccRowId, transaction) {
                     invRowId: parentRow ? parentRow.id : null,
                     productName,
                     batchName,
-                    currentQty
+                    currentQty,
+                    expiryDate: expiryRaw || null
                 }, { transaction });
 
                 sendStockAlertEmail({
