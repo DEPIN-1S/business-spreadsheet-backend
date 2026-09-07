@@ -53,6 +53,8 @@ async function ensurePartyColumns() {
     await alterQuery('invoice_items', 'gstPercent', 'DECIMAL(5,2) DEFAULT 5');
     await alterQuery('invoice_items', 'expiry', 'VARCHAR(50) NULL');
     await alterQuery('invoice_items', 'hsnCode', 'VARCHAR(50) NULL');
+
+    await alterQuery('inv_notifications', 'invoiceDate', 'DATE NULL');
 }
 
 sequelize
