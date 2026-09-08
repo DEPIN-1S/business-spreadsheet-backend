@@ -26,7 +26,13 @@ export function initSocket(httpServer) {
             methods: ["GET", "POST"],
             credentials: true
         },
-        transports: ["websocket", "polling"]
+        transports: ["websocket", "polling"],
+        pingInterval: 25000,
+        pingTimeout: 60000,
+        connectionStateRecovery: {
+            maxDisconnectionDuration: 2 * 60 * 1000,
+            skipMiddlewares: true
+        }
     });
 
     // ── Redis Setup ─────────────────────────────────────────────────────────────
@@ -179,8 +185,8 @@ export function initSocket(httpServer) {
             }
         });
 
-        socket.on("disconnect", async () => {
-            logger.info(`Socket disconnected: ${socket.user?.name}`);
+        socket.on("disconnect", async (reason) => {
+            logger.info(`Socket disconnected: ${socket.user?.name} (${reason})`);
             try {
                 // 1. Leave all sheets this socket was in
                 const activeSheets = await redisClient.sMembers(`socket:${socket.id}:sheets`);

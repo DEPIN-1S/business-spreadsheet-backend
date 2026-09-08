@@ -42,9 +42,9 @@ export const checkSheetPermission = (action = "view") => async (req, res, next) 
         let perm = await SheetPermission.findOne({ where: { userId, spreadsheetId: sheetId } });
         
         if (perm) {
-            logger.info(`[DEBUG] Found direct SheetPermission for userId=${userId}, sheetId=${sheetId}`);
+            logger.debug(`[DEBUG] Found direct SheetPermission for userId=${userId}, sheetId=${sheetId}`);
         } else if (role === "staff" || role === "admin") {
-            logger.info(`[DEBUG] No direct SheetPermission, checking owner/inheritance for user=${userId} (role=${role}), sheetId=${sheetId}`);
+            logger.debug(`[DEBUG] No direct SheetPermission, checking owner/inheritance for user=${userId} (role=${role}), sheetId=${sheetId}`);
             
             // Fetch sheet to check owner (createdBy), folderId, and isDetailedView
             const sheet = await Spreadsheet.findOne({ where: { id: sheetId, isDeleted: false }, attributes: ["id", "folderId", "createdBy", "isDetailedView"] });
@@ -61,7 +61,7 @@ export const checkSheetPermission = (action = "view") => async (req, res, next) 
                         role: "admin",
                         isOwner: true
                     };
-                    logger.info(`[DEBUG] User is owner of sheet=${sheetId}`);
+                    logger.debug(`[DEBUG] User is owner of sheet=${sheetId}`);
                 } 
                 // 2. Inheritance Check
                 else if (sheet.folderId) {
@@ -76,7 +76,7 @@ export const checkSheetPermission = (action = "view") => async (req, res, next) 
                             role: folderPerm.canEdit ? "editor" : "viewer",
                             isInherited: true
                         };
-                        logger.info(`[DEBUG] Inherited recursive permission from folder=${folderPerm.folderId}`);
+                        logger.debug(`[DEBUG] Inherited recursive permission from folder=${folderPerm.folderId}`);
                     }
                 }
                 // 3. Nested Sheet Check
@@ -97,7 +97,7 @@ export const checkSheetPermission = (action = "view") => async (req, res, next) 
                                     role: parentPerm.role,
                                     isInherited: true
                                 };
-                                logger.info(`[DEBUG] Inherited nested permission from parent sheet=${row.spreadsheetId}`);
+                                logger.debug(`[DEBUG] Inherited nested permission from parent sheet=${row.spreadsheetId}`);
                             } else {
                                 // Maybe inherited from parent folder? We can check via recursion, but let's do a simple folder check
                                 const parentSheet = await Spreadsheet.findOne({ where: { id: row.spreadsheetId, isDeleted: false }, attributes: ["folderId", "createdBy"] });
@@ -125,7 +125,7 @@ export const checkSheetPermission = (action = "view") => async (req, res, next) 
             throw new AppError("No permission for this spreadsheet", 403);
         }
 
-        logger.info(`[DEBUG] Found permission: canView=${perm.canView}, canEdit=${perm.canEdit}, role=${perm.role}`);
+        logger.debug(`[DEBUG] Found permission: canView=${perm.canView}, canEdit=${perm.canEdit}, role=${perm.role}`);
 
         if (action === "view" && !perm.canView) throw new AppError("View access denied", 403);
         if (action === "edit") {
