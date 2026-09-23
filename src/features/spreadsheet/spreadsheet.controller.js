@@ -871,9 +871,10 @@ export const listSheets = async (req, res, next) => {
     try {
         const { id: userId, role } = req.user;
         const { page, limit, offset } = getPagination(req);
-        const { folderId, shared } = req.query;
+        const { folderId, shared, forInvoiceGenerator } = req.query;
 
         let whereSpreadsheet = { isDeleted: false, isDetailedView: false };
+        if (forInvoiceGenerator === "true") whereSpreadsheet.visibleOnInvoiceGenerator = true;
         if (folderId) whereSpreadsheet.folderId = folderId;
 
         if (shared === "true") {

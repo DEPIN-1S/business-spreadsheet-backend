@@ -8,6 +8,7 @@ import logger from "./config/logger.js";
 import { initSocket } from "./config/socket.js";
 import "./config/associations.js";
 import { initCron } from "./features/inv_notifications/inv_notification.cron.js";
+import { updatePartiesAgeForNewYear } from "./features/business/party_age.service.js";
 
 const PORT = process.env.PORT || 6043;
 const httpServer = http.createServer(app);
@@ -28,7 +29,9 @@ async function ensurePartyColumns() {
     await alterQuery('retail_parties', 'gstinNo', 'VARCHAR(100) NULL');
     await alterQuery('retail_parties', 'panNo', 'VARCHAR(100) NULL');
     await alterQuery('retail_parties', 'dobYear', 'INT NULL');
-    await alterQuery('retail_parties', 'age', 'INT NULL');
+    await alterQuery('retail_parties', 'age', 'VARCHAR(50) NULL');
+    await alterQuery('retail_parties', 'gender', 'VARCHAR(50) NULL');
+    await alterQuery('retail_parties', 'ageLastUpdatedYear', 'INT NULL');
     await alterQuery('retail_parties', 'createdBy', 'VARCHAR(36) NULL');
 
     await alterQuery('wholesale_parties', 'registrationNo', 'TEXT NULL');
@@ -36,8 +39,13 @@ async function ensurePartyColumns() {
     await alterQuery('wholesale_parties', 'gstinNo', 'VARCHAR(100) NULL');
     await alterQuery('wholesale_parties', 'panNo', 'VARCHAR(100) NULL');
     await alterQuery('wholesale_parties', 'dobYear', 'INT NULL');
-    await alterQuery('wholesale_parties', 'age', 'INT NULL');
+    await alterQuery('wholesale_parties', 'age', 'VARCHAR(50) NULL');
+    await alterQuery('wholesale_parties', 'gender', 'VARCHAR(50) NULL');
+    await alterQuery('wholesale_parties', 'ageLastUpdatedYear', 'INT NULL');
     await alterQuery('wholesale_parties', 'createdBy', 'VARCHAR(36) NULL');
+
+    await alterQuery('business_parties', 'gender', 'VARCHAR(50) NULL');
+    await alterQuery('business_parties', 'ageLastUpdatedYear', 'INT NULL');
 
     await alterQuery('invoices', 'createdBy', 'VARCHAR(36) NULL');
     await alterQuery('invoices', 'itemSubtotal', 'DECIMAL(15,2) DEFAULT 0');
@@ -55,12 +63,16 @@ async function ensurePartyColumns() {
     await alterQuery('invoice_items', 'hsnCode', 'VARCHAR(50) NULL');
 
     await alterQuery('inv_notifications', 'invoiceDate', 'DATE NULL');
+    await alterQuery('templates', 'signatureImage', 'LONGTEXT NULL');
+    await alterQuery('templates', 'spreadsheetIds', 'LONGTEXT NULL');
+    await alterQuery('businesses', 'seals', 'LONGTEXT NULL');
 }
 
 sequelize
-  .sync()
+  .sync({ alter: false })
   .then(async () => {
     await ensurePartyColumns();
+    await updatePartiesAgeForNewYear();
     logger.info("✅ Database synced");
     httpServer.listen(PORT, () => {
       logger.info(`🚀 Server running on http://localhost:${PORT}`);
@@ -68,6 +80,6 @@ sequelize
     });
   })
   .catch((err) => {
-    logger.error("❌ Database sync failed: " + err.message);
+    logger.error("❌ Database sync failed: " + err);
     process.exit(1);
   });

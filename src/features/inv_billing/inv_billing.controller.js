@@ -208,7 +208,7 @@ export const listParties = async (req, res, next) => {
 export const createParty = async (req, res, next) => {
     try {
         const Model = getPartyModel(req.params.type);
-        const { name, contact, email, address, billingAddress, shippingAddress, registrationNo, dlNo, gstinNo, panNo, dobYear, age } = req.body;
+        const { name, contact, email, address, billingAddress, shippingAddress, registrationNo, dlNo, gstinNo, panNo, dobYear, age, gender } = req.body;
         if (!name?.trim()) throw new AppError("Party name is required", 422);
 
         const parts = [];
@@ -219,8 +219,8 @@ export const createParty = async (req, res, next) => {
 
         const currentYear = new Date().getFullYear();
         const computedAge = dobYear && !isNaN(Number(dobYear)) && Number(dobYear) > 1900
-            ? (currentYear - Number(dobYear) + 1)
-            : (age ? Number(age) : null);
+            ? String(currentYear - Number(dobYear) + 1)
+            : (age !== undefined && age !== null && String(age).trim() !== "" ? String(age).trim() : null);
 
         // billingAddress takes priority; fall back to legacy address field
         const effectiveBillingAddress = billingAddress ? String(billingAddress).trim() : (address ? String(address).trim() : null);
@@ -239,6 +239,8 @@ export const createParty = async (req, res, next) => {
             panNo: panNo ? String(panNo).trim() : null,
             dobYear: dobYear ? Number(dobYear) : null,
             age: computedAge,
+            gender: gender ? String(gender).trim() : null,
+            ageLastUpdatedYear: computedAge ? currentYear : null,
             createdBy: req.user?.id || null
         });
         res.status(201).json({ data: party, message: "Party created successfully" });
@@ -251,7 +253,7 @@ export const updateParty = async (req, res, next) => {
         const party = await Model.findOne({ where: { id: req.params.id, isDeleted: false } });
         if (!party) throw new AppError("Party not found", 404);
 
-        const { name, contact, email, address, billingAddress, shippingAddress, registrationNo, dlNo, gstinNo, panNo, dobYear, age } = req.body;
+        const { name, contact, email, address, billingAddress, shippingAddress, registrationNo, dlNo, gstinNo, panNo, dobYear, age, gender } = req.body;
         if (name !== undefined && !name?.trim()) throw new AppError("Party name is required", 422);
 
         const parts = [];
@@ -267,8 +269,8 @@ export const updateParty = async (req, res, next) => {
         const finalDobYear = dobYear !== undefined ? dobYear : party.dobYear;
         const finalAge = age !== undefined ? age : party.age;
         const computedAge = finalDobYear && !isNaN(Number(finalDobYear)) && Number(finalDobYear) > 1900
-            ? (currentYear - Number(finalDobYear) + 1)
-            : (finalAge ? Number(finalAge) : null);
+            ? String(currentYear - Number(finalDobYear) + 1)
+            : (finalAge !== undefined && finalAge !== null && String(finalAge).trim() !== "" ? String(finalAge).trim() : null);
 
         // Resolve effective billing/shipping from new or existing values
         const effectiveBillingAddress = billingAddress !== undefined
@@ -290,6 +292,8 @@ export const updateParty = async (req, res, next) => {
             ...(gstinNo !== undefined && { gstinNo: gstinNo ? String(gstinNo).trim() : null }),
             ...(panNo !== undefined && { panNo: panNo ? String(panNo).trim() : null }),
             ...(dobYear !== undefined && { dobYear: dobYear ? Number(dobYear) : null }),
+            ...(gender !== undefined && { gender: gender ? String(gender).trim() : null }),
+            ...(age !== undefined && { ageLastUpdatedYear: age ? currentYear : null }),
             age: computedAge
         });
         res.json({ data: party, message: "Party updated successfully" });

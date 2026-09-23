@@ -8,6 +8,7 @@ import Invoice from "../inv_billing/invoice.model.js";
 import RetailParty from "../inv_billing/retail_party.model.js";
 import WholesaleParty from "../inv_billing/wholesale_party.model.js";
 import { sendStockAlertEmail, sendPendingPaymentEmail } from "../../utils/emailService.js";
+import { updatePartiesAgeForNewYear } from "../business/party_age.service.js";
 import { Op } from "sequelize";
 
 // Helper to get cell value from list of cells
@@ -249,5 +250,12 @@ export const initCron = () => {
     cron.schedule("0 0 * * *", () => {
         checkInventoryAlerts();
         checkPendingLedgerAlerts();
+        updatePartiesAgeForNewYear();
+    });
+
+    // Explicit schedule on January 1st at 00:00:00 every year
+    cron.schedule("0 0 1 1 *", () => {
+        console.log("[Party Age Cron] Running annual January 1 age increment...");
+        updatePartiesAgeForNewYear();
     });
 };

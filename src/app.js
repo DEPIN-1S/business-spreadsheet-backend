@@ -24,6 +24,8 @@ import { folderRouter as invFolderRouter, sheetRouter as invSheetRouter } from "
 import invMastersRouter from "./features/inv_masters/inv_masters.routes.js";
 import { partyRouter, invoiceRouter, ledgerRouter } from "./features/inv_billing/inv_billing.routes.js";
 import invNotificationRouter from "./features/inv_notifications/inv_notification.routes.js";
+import businessRoutes from "./features/business/business.routes.js";
+import templateRoutes from "./features/template/template.routes.js";
 
 const app = express();
 
@@ -106,6 +108,8 @@ app.use("/api/inv/parties", partyRouter);
 app.use("/api/inv/invoices", invoiceRouter);
 app.use("/api/inv/ledger", ledgerRouter);
 app.use("/api/inv/notifications", invNotificationRouter);
+app.use("/api/business", businessRoutes);
+app.use("/api/templates", templateRoutes);
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get("/health", (req, res) => res.json({ status: "ok", ts: new Date().toISOString() }));

@@ -10,6 +10,7 @@ const Spreadsheet = sequelize.define("Spreadsheet", {
     settings: { type: DataTypes.JSON, defaultValue: {} },
     isDetailedView: { type: DataTypes.BOOLEAN, defaultValue: false },
     isLocked: { type: DataTypes.BOOLEAN, defaultValue: false },
+    visibleOnInvoiceGenerator: { type: DataTypes.BOOLEAN, defaultValue: false },
     isDeleted: { type: DataTypes.BOOLEAN, defaultValue: false }
 }, {
     tableName: "spreadsheets",

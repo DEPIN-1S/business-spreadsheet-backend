@@ -18,6 +18,7 @@ import ChatMessage from "../features/chat/chatmessage.model.js";
 import DirectMessage from "../features/chat/direct_message.model.js";
 import AuditLog from "../features/audit/auditlog.model.js";
 import InventoryItem from "../features/inventory/inventory.model.js";
+import BusinessUser from "../features/business/business_user.model.js";
 
 // ── NEW: Inventory Sheet imports (separate tables) ─────────────────────────────
 import InvFolder from "../features/inv_sheet/inv_folder.model.js";
@@ -44,6 +45,11 @@ import Invoice from "../features/inv_billing/invoice.model.js";
 import InvoiceItem from "../features/inv_billing/invoice_item.model.js";
 import LedgerEntry from "../features/inv_billing/ledger.model.js";
 import InvNotification from "../features/inv_notifications/inv_notification.model.js";
+
+// ── NEW: Business module imports ───────────────────────────────────────────────
+import Business from "../features/business/business.model.js";
+import Template from "../features/template/template.model.js";
+import BusinessParty from "../features/business/business_party.model.js";
 
 // ── User ─────────────────────────────────────────────────────────────────────
 User.hasMany(RefreshToken, { foreignKey: "userId", as: "refreshTokens", onDelete: "CASCADE" });
@@ -188,5 +194,21 @@ export {
     InvGstOption, InvCategory, InvDivision,
     InvManufacturer, InvCompany, InvQuantityUnit, InvHsnCode,
     // Inventory Billing (new)
-    RetailParty, WholesaleParty, Invoice, InvoiceItem, LedgerEntry, InvNotification
+    RetailParty, WholesaleParty, Invoice, InvoiceItem, LedgerEntry, InvNotification,
+    // Business (new)
+    Business,
+    BusinessUser
 };
+
+// Business <-> BusinessParty
+Business.hasMany(BusinessParty, { foreignKey: "businessId", as: "parties" });
+BusinessParty.belongsTo(Business, { foreignKey: "businessId" });
+
+// Business <-> User (Sharing)
+Business.belongsToMany(User, { through: BusinessUser, as: "sharedUsers", foreignKey: "businessId" });
+User.belongsToMany(Business, { through: BusinessUser, as: "sharedBusinesses", foreignKey: "userId" });
+
+
+// Business <-> Template
+Business.hasMany(Template, { foreignKey: "businessId", as: "templates" });
+Template.belongsTo(Business, { foreignKey: "businessId" });
