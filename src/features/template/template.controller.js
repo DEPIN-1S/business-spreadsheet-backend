@@ -1,7 +1,7 @@
 import Template from "./template.model.js";
 import Business from "../business/business.model.js";
 import Spreadsheet from "../spreadsheet/spreadsheet.model.js";
-import AppError from "../../utils/appError.js";
+import AppError from "../../utils/AppError.js";
 
 function parseSpreadsheetIds(spreadsheetIds, spreadsheetId) {
     let resolved = [];
