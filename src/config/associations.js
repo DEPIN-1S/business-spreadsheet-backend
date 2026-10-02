@@ -50,6 +50,7 @@ import InvNotification from "../features/inv_notifications/inv_notification.mode
 import Business from "../features/business/business.model.js";
 import Template from "../features/template/template.model.js";
 import BusinessParty from "../features/business/business_party.model.js";
+import SavedInvoice from "../features/business/saved_invoice.model.js";
 
 // ── User ─────────────────────────────────────────────────────────────────────
 User.hasMany(RefreshToken, { foreignKey: "userId", as: "refreshTokens", onDelete: "CASCADE" });
@@ -212,3 +213,7 @@ User.belongsToMany(Business, { through: BusinessUser, as: "sharedBusinesses", fo
 // Business <-> Template
 Business.hasMany(Template, { foreignKey: "businessId", as: "templates" });
 Template.belongsTo(Business, { foreignKey: "businessId" });
+
+// Business <-> SavedInvoice
+Business.hasMany(SavedInvoice, { foreignKey: "businessId", as: "savedInvoices" });
+SavedInvoice.belongsTo(Business, { foreignKey: "businessId" });

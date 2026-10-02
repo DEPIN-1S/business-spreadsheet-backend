@@ -65,6 +65,7 @@ async function ensurePartyColumns() {
     await alterQuery('inv_notifications', 'invoiceDate', 'DATE NULL');
     await alterQuery('templates', 'signatureImage', 'LONGTEXT NULL');
     await alterQuery('templates', 'spreadsheetIds', 'LONGTEXT NULL');
+    await alterQuery('templates', 'showBusinessName', 'TINYINT(1) DEFAULT 1');
     await alterQuery('businesses', 'seals', 'LONGTEXT NULL');
 }
 

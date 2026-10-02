@@ -23,7 +23,7 @@ function parseSpreadsheetIds(spreadsheetIds, spreadsheetId) {
 // Create a new template for a business
 export const createTemplate = async (req, res, next) => {
     try {
-        const { businessId, name, isProductBased, isB2B, columns, spreadsheetId, spreadsheetIds, signatureImage } = req.body;
+        const { businessId, name, isProductBased, isB2B, showBusinessName, columns, spreadsheetId, spreadsheetIds, signatureImage } = req.body;
 
         if (!businessId || !name) {
             throw new AppError("Business ID and Template Name are required", 400);
@@ -42,6 +42,7 @@ export const createTemplate = async (req, res, next) => {
             name,
             isProductBased: isProductBased !== undefined ? isProductBased : true,
             isB2B: isB2B !== undefined ? isB2B : false,
+            showBusinessName: showBusinessName !== undefined ? showBusinessName : true,
             columns: columns || [],
             spreadsheetId: primaryId,
             spreadsheetIds: resolvedIds,
@@ -118,7 +119,7 @@ export const getTemplates = async (req, res, next) => {
 export const updateTemplate = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const { name, isProductBased, isB2B, columns, spreadsheetId, spreadsheetIds, signatureImage } = req.body;
+        const { name, isProductBased, isB2B, showBusinessName, columns, spreadsheetId, spreadsheetIds, signatureImage } = req.body;
 
         const template = await Template.findByPk(id);
         if (!template) {
@@ -128,6 +129,7 @@ export const updateTemplate = async (req, res, next) => {
         if (name) template.name = name;
         if (isProductBased !== undefined) template.isProductBased = isProductBased;
         if (isB2B !== undefined) template.isB2B = isB2B;
+        if (showBusinessName !== undefined) template.showBusinessName = showBusinessName;
         if (columns) template.columns = columns;
         
         if (spreadsheetIds !== undefined) {

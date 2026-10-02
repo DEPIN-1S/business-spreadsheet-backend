@@ -7,6 +7,7 @@ import rateLimit from "express-rate-limit";
 
 import responseFormatter from "./middleware/responseFormatter.js";
 import errorHandler from "./middleware/error.js";
+import "./config/associations.js";
 
 // Routes
 import userRoutes from "./features/user/user.routes.js";

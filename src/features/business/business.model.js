@@ -10,6 +10,8 @@ const Business = sequelize.define("Business", {
     logo: { type: DataTypes.TEXT("long"), allowNull: true },
     additionalData: { type: DataTypes.JSON, defaultValue: [] },
     seals: { type: DataTypes.JSON, defaultValue: [] },
+    signatures: { type: DataTypes.JSON, defaultValue: [] },
+    signatureImage: { type: DataTypes.TEXT("long"), allowNull: true },
     createdBy: { type: DataTypes.UUID, allowNull: false },
     isDeleted: { type: DataTypes.BOOLEAN, defaultValue: false }
 }, {
