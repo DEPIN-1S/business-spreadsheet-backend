@@ -12,7 +12,8 @@ const SavedInvoice = sequelize.define("SavedInvoice", {
     grandTotal: { type: DataTypes.STRING(50), allowNull: true },
     fullData: { type: DataTypes.JSON, allowNull: true }, // The heavy JSON blob
     createdBy: { type: DataTypes.UUID, allowNull: true }, // User ID
-    businessId: { type: DataTypes.UUID, allowNull: true } // Business it belongs to
+    businessId: { type: DataTypes.UUID, allowNull: true }, // Business it belongs to
+    isCb: { type: DataTypes.BOOLEAN, defaultValue: false }
 }, { tableName: "saved_invoices" });
 
 export default SavedInvoice;

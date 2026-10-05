@@ -390,11 +390,69 @@ export const saveInvoice = async (req, res) => {
             total: payload.total,
             grandTotal: payload.grandTotal,
             fullData: payload.fullData,
+            isCb: payload.isCb !== undefined ? Boolean(payload.isCb) : false,
             createdBy: req.user.id
         });
-        res.status(201).json({ success: true, invoice });
+        const invoiceData = invoice.toJSON();
+        if (typeof invoiceData.fullData === 'string') {
+            try { invoiceData.fullData = JSON.parse(invoiceData.fullData); } catch (e) {}
+        }
+        res.status(201).json({ success: true, invoice: invoiceData });
     } catch (error) {
         console.error("Error saving invoice:", error);
+        res.status(500).json({ success: false, message: "Server error" });
+    }
+};
+
+export const updateSavedInvoice = async (req, res) => {
+    try {
+        const { businessId, invoiceId } = req.params;
+        const payload = req.body;
+        const invoice = await SavedInvoice.findOne({ where: { id: invoiceId, businessId } });
+        if (!invoice) {
+            return res.status(404).json({ success: false, message: "Invoice not found" });
+        }
+        await invoice.update({
+            invoiceNo: payload.invoiceNo || invoice.invoiceNo,
+            templateName: payload.templateName || invoice.templateName,
+            date: payload.date || invoice.date,
+            time: payload.time || invoice.time,
+            partyName: payload.partyName || invoice.partyName,
+            total: payload.total !== undefined ? payload.total : invoice.total,
+            grandTotal: payload.grandTotal !== undefined ? payload.grandTotal : invoice.grandTotal,
+            fullData: payload.fullData || invoice.fullData,
+            isCb: payload.isCb !== undefined ? Boolean(payload.isCb) : invoice.isCb
+        });
+        const invoiceData = invoice.toJSON();
+        if (typeof invoiceData.fullData === 'string') {
+            try { invoiceData.fullData = JSON.parse(invoiceData.fullData); } catch (e) {}
+        }
+        res.status(200).json({ success: true, invoice: invoiceData });
+    } catch (error) {
+        console.error("Error updating saved invoice:", error);
+        res.status(500).json({ success: false, message: "Server error" });
+    }
+};
+
+export const toggleSavedInvoiceCb = async (req, res) => {
+    try {
+        if (req.user?.role !== 'superadmin') {
+            return res.status(403).json({ success: false, message: "Forbidden – only Super Admin can toggle CB status" });
+        }
+        const { businessId, invoiceId } = req.params;
+        const invoice = await SavedInvoice.findOne({ where: { id: invoiceId, businessId } });
+        if (!invoice) {
+            return res.status(404).json({ success: false, message: "Invoice not found" });
+        }
+        const newCb = req.body.isCb !== undefined ? Boolean(req.body.isCb) : !invoice.isCb;
+        await invoice.update({ isCb: newCb });
+        const invoiceData = invoice.toJSON();
+        if (typeof invoiceData.fullData === 'string') {
+            try { invoiceData.fullData = JSON.parse(invoiceData.fullData); } catch (e) {}
+        }
+        res.status(200).json({ success: true, invoice: invoiceData });
+    } catch (error) {
+        console.error("Error toggling CB status:", error);
         res.status(500).json({ success: false, message: "Server error" });
     }
 };
@@ -402,11 +460,29 @@ export const saveInvoice = async (req, res) => {
 export const getSavedInvoices = async (req, res) => {
     try {
         const { businessId } = req.params;
+        const isSuperAdmin = req.user && req.user.role === 'superadmin';
+
+        const whereClause = { businessId };
+        if (!isSuperAdmin) {
+            // For non-superadmin users (admin, staff, etc.), hide invoices where CB is applied
+            whereClause[Op.or] = [
+                { isCb: false },
+                { isCb: null }
+            ];
+        }
+
         const invoices = await SavedInvoice.findAll({
-            where: { businessId },
+            where: whereClause,
             order: [['createdAt', 'DESC']]
         });
-        res.status(200).json({ success: true, invoices });
+        const parsedInvoices = invoices.map(inv => {
+            const data = inv.toJSON();
+            if (typeof data.fullData === 'string') {
+                try { data.fullData = JSON.parse(data.fullData); } catch (e) {}
+            }
+            return data;
+        });
+        res.status(200).json({ success: true, invoices: parsedInvoices });
     } catch (error) {
         console.error("Error fetching saved invoices:", error);
         res.status(500).json({ success: false, message: "Server error" });

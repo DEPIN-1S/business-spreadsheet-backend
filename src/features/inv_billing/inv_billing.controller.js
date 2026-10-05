@@ -208,7 +208,7 @@ export const listParties = async (req, res, next) => {
 export const createParty = async (req, res, next) => {
     try {
         const Model = getPartyModel(req.params.type);
-        const { name, contact, email, address, billingAddress, shippingAddress, registrationNo, dlNo, gstinNo, panNo, dobYear, age, gender } = req.body;
+        const { name, contact, email, place, address, billingAddress, shippingAddress, registrationNo, dlNo, gstinNo, panNo, dobYear, age, gender } = req.body;
         if (!name?.trim()) throw new AppError("Party name is required", 422);
 
         const parts = [];
@@ -226,7 +226,7 @@ export const createParty = async (req, res, next) => {
         const effectiveBillingAddress = billingAddress ? String(billingAddress).trim() : (address ? String(address).trim() : null);
         const effectiveShippingAddress = shippingAddress ? String(shippingAddress).trim() : effectiveBillingAddress;
 
-        const party = await Model.create({
+        const partyData = {
             name: name.trim(),
             contact: contact ? String(contact).trim() : null,
             email: email ? String(email).trim() : null,
@@ -242,7 +242,14 @@ export const createParty = async (req, res, next) => {
             gender: gender ? String(gender).trim() : null,
             ageLastUpdatedYear: computedAge ? currentYear : null,
             createdBy: req.user?.id || null
-        });
+        };
+        if (Model.rawAttributes?.place) {
+            partyData.place = place !== undefined
+                ? (place ? String(place).trim() : null)
+                : (email ? String(email).trim() : null);
+        }
+
+        const party = await Model.create(partyData);
         res.status(201).json({ data: party, message: "Party created successfully" });
     } catch (e) { next(e); }
 };
@@ -253,7 +260,7 @@ export const updateParty = async (req, res, next) => {
         const party = await Model.findOne({ where: { id: req.params.id, isDeleted: false } });
         if (!party) throw new AppError("Party not found", 404);
 
-        const { name, contact, email, address, billingAddress, shippingAddress, registrationNo, dlNo, gstinNo, panNo, dobYear, age, gender } = req.body;
+        const { name, contact, email, place, address, billingAddress, shippingAddress, registrationNo, dlNo, gstinNo, panNo, dobYear, age, gender } = req.body;
         if (name !== undefined && !name?.trim()) throw new AppError("Party name is required", 422);
 
         const parts = [];
@@ -280,7 +287,7 @@ export const updateParty = async (req, res, next) => {
             ? (shippingAddress ? String(shippingAddress).trim() : null)
             : party.shippingAddress;
 
-        await party.update({
+        const updateData = {
             ...(name !== undefined && { name: name.trim() }),
             ...(contact !== undefined && { contact: contact ? String(contact).trim() : null }),
             ...(email !== undefined && { email: email ? String(email).trim() : null }),
@@ -295,7 +302,14 @@ export const updateParty = async (req, res, next) => {
             ...(gender !== undefined && { gender: gender ? String(gender).trim() : null }),
             ...(age !== undefined && { ageLastUpdatedYear: age ? currentYear : null }),
             age: computedAge
-        });
+        };
+        if (Model.rawAttributes?.place && (place !== undefined || email !== undefined)) {
+            updateData.place = place !== undefined
+                ? (place ? String(place).trim() : null)
+                : (email ? String(email).trim() : null);
+        }
+
+        await party.update(updateData);
         res.json({ data: party, message: "Party updated successfully" });
     } catch (e) { next(e); }
 };

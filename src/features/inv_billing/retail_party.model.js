@@ -15,6 +15,7 @@ const RetailParty = sequelize.define("RetailParty", {
     contact: { type: DataTypes.STRING(20), allowNull: true },
     email: { type: DataTypes.STRING(150), allowNull: true },
     address: { type: DataTypes.TEXT, allowNull: true },
+    place: { type: DataTypes.STRING(200), allowNull: true },
     createdBy: { type: DataTypes.UUID, allowNull: true },
     isDeleted: { type: DataTypes.BOOLEAN, defaultValue: false }
 }, { tableName: "retail_parties" });

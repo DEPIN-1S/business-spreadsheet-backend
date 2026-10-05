@@ -30,13 +30,30 @@ export function buildGraph(columns) {
     // Build a name→id map
     const nameToId = {};
     columns.forEach(col => {
-        nameToId[col.name.toUpperCase()] = col.id;
+        if (col.name) {
+            nameToId[col.name.trim().toUpperCase()] = col.id;
+        }
     });
 
     const graph = new Map();
     columns.forEach(col => {
         graph.set(col.id, new Set());
+    });
+
+    columns.forEach(col => {
         if (col.formulaExpr) {
+            // Check direct column name matches in formula expression
+            columns.forEach(otherCol => {
+                if (otherCol.id !== col.id && otherCol.name?.trim()) {
+                    const escaped = otherCol.name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                    const regex = new RegExp(`(?<=^|[^a-zA-Z0-9_])${escaped}(?=$|[^a-zA-Z0-9_])`, "i");
+                    if (regex.test(col.formulaExpr)) {
+                        graph.get(col.id).add(otherCol.id);
+                    }
+                }
+            });
+
+            // Also check letter refs (e.g. A1, B2)
             const refs = extractRefs(col.formulaExpr);
             refs.forEach(ref => {
                 const depId = nameToId[ref.toUpperCase()];
@@ -101,7 +118,8 @@ export function topoSort(graph) {
         throw new Error("Circular dependency detected in column graph");
     }
 
-    return result;
+    // Reverse so dependencies are calculated before dependent formulas
+    return result.reverse();
 }
 
 export default { buildGraph, checkCircular, topoSort, extractRefs };

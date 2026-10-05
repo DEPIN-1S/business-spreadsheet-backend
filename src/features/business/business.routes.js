@@ -6,7 +6,8 @@ import {
     getBusiness,
     updateBusiness,
     deleteBusiness,
-    saveInvoice, getSavedInvoices, deleteSavedInvoice, clearSavedInvoices
+    saveInvoice, updateSavedInvoice, getSavedInvoices, deleteSavedInvoice, clearSavedInvoices,
+    toggleSavedInvoiceCb
 } from "./business.controller.js";
 
 const router = express.Router();
@@ -29,6 +30,8 @@ router.delete("/:id/parties/:partyId", deleteBusinessParty);
 
 // Saved Invoices
 router.post("/:businessId/invoices", saveInvoice);
+router.put("/:businessId/invoices/:invoiceId", updateSavedInvoice);
+router.patch("/:businessId/invoices/:invoiceId/toggle-cb", protect(["superadmin"]), toggleSavedInvoiceCb);
 router.get("/:businessId/invoices", getSavedInvoices);
 router.delete("/:businessId/invoices/:invoiceId", deleteSavedInvoice);
 router.delete("/:businessId/invoices", clearSavedInvoices);
