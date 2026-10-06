@@ -290,7 +290,7 @@ export const listBusinessParties = async (req, res) => {
 export const addBusinessParty = async (req, res) => {
     try {
         const { id: businessId } = req.params;
-        const { id: partyIdParam, name, billingAddress, shippingAddress, contact, email, dlNo, gstin, pan, age, gender, additionalData } = req.body;
+        const { id: partyIdParam, name, billingAddress, shippingAddress, contact, email, dlNo, gstin, pan, age, gender, place, additionalData } = req.body;
         
         const business = await Business.findOne({
             where: { id: businessId, isDeleted: false },
@@ -316,7 +316,8 @@ export const addBusinessParty = async (req, res) => {
                     gstin, 
                     pan, 
                     age, 
-                    gender, 
+                    gender,
+                    place: place !== undefined ? (place ? place.trim() : null) : existingParty.place,
                     ageLastUpdatedYear: age ? currentYear : existingParty.ageLastUpdatedYear,
                     additionalData 
                 });
@@ -335,7 +336,8 @@ export const addBusinessParty = async (req, res) => {
             gstin, 
             pan, 
             age, 
-            gender, 
+            gender,
+            place: place ? place.trim() : null,
             ageLastUpdatedYear: age ? currentYear : null,
             additionalData 
         });

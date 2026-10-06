@@ -14,6 +14,7 @@ const BusinessParty = sequelize.define("BusinessParty", {
     pan: { type: DataTypes.STRING, allowNull: true },
     age: { type: DataTypes.STRING, allowNull: true },
     gender: { type: DataTypes.STRING, allowNull: true },
+    place: { type: DataTypes.STRING, allowNull: true },
     ageLastUpdatedYear: { type: DataTypes.INTEGER, allowNull: true },
     additionalData: { type: DataTypes.JSON, defaultValue: [] },
     isDeleted: { type: DataTypes.BOOLEAN, defaultValue: false }
