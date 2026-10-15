@@ -217,3 +217,5 @@ Template.belongsTo(Business, { foreignKey: "businessId" });
 // Business <-> SavedInvoice
 Business.hasMany(SavedInvoice, { foreignKey: "businessId", as: "savedInvoices" });
 SavedInvoice.belongsTo(Business, { foreignKey: "businessId" });
+
+import "../features/freelance/freelance.model.js";

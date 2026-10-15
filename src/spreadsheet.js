@@ -69,8 +69,7 @@ async function ensurePartyColumns() {
     await alterQuery('businesses', 'seals', 'LONGTEXT NULL');
 }
 
-sequelize
-  .sync({ alter: false })
+sequelize.sync({ alter: false })
   .then(async () => {
     await ensurePartyColumns();
     await updatePartiesAgeForNewYear();

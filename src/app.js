@@ -27,6 +27,7 @@ import { partyRouter, invoiceRouter, ledgerRouter } from "./features/inv_billing
 import invNotificationRouter from "./features/inv_notifications/inv_notification.routes.js";
 import businessRoutes from "./features/business/business.routes.js";
 import templateRoutes from "./features/template/template.routes.js";
+import freelanceRoutes from "./features/freelance/freelance.routes.js";
 
 const app = express();
 
@@ -111,6 +112,7 @@ app.use("/api/inv/ledger", ledgerRouter);
 app.use("/api/inv/notifications", invNotificationRouter);
 app.use("/api/business", businessRoutes);
 app.use("/api/templates", templateRoutes);
+app.use("/api/freelance", freelanceRoutes);
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get("/health", (req, res) => res.json({ status: "ok", ts: new Date().toISOString() }));
