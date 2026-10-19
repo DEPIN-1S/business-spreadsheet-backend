@@ -1,11 +1,7 @@
 import multer from "multer";
 import path from "path";
 import crypto from "crypto";
-import fs from "fs";
-
-// ── Ensure upload directory exists ──────────────────────────────────────────
-const DM_FILES_DIR = "uploads/dm-files";
-if (!fs.existsSync(DM_FILES_DIR)) fs.mkdirSync(DM_FILES_DIR, { recursive: true });
+import { createR2Storage } from "../services/r2.js";
 
 const ALLOWED_MIME_TYPES = [
     "image/jpeg",
@@ -17,17 +13,17 @@ const ALLOWED_MIME_TYPES = [
 
 const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf"];
 
-// ── Storage configuration ───────────────────────────────────────────────────
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, DM_FILES_DIR),
-    filename: (req, file, cb) => {
+const storage = createR2Storage({
+    filename(req, file, cb) {
         const unique = crypto.randomBytes(16).toString("hex");
         const ext = path.extname(file.originalname).toLowerCase() || ".bin";
         cb(null, `${unique}${ext}`);
+    },
+    key(req, file, filename) {
+        return `uploads/dm-files/${filename}`;
     }
 });
 
-// ── File type validation ────────────────────────────────────────────────────
 const fileFilter = (req, file, cb) => {
     const mimeOk = ALLOWED_MIME_TYPES.includes(file.mimetype);
     const extOk = ALLOWED_EXTENSIONS.includes(path.extname(file.originalname).toLowerCase());
@@ -39,7 +35,6 @@ const fileFilter = (req, file, cb) => {
     }
 };
 
-// ── Export configured multer instance ───────────────────────────────────────
 export const fileUpload = multer({
     storage,
     fileFilter,

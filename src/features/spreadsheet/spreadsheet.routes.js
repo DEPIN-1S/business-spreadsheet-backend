@@ -9,7 +9,7 @@ import {
     shareSheet, updateShareRole, removeShare, getSharedWithMe, setPermission, listPermissions,
     createSheet, getSheet, deleteSheet, duplicateSheet,
     exportSheet, importSheet, copyRow, updateSheetSort, moveSharedItem,
-    selfRemoveShare
+    selfRemoveShare, searchInvoiceSheets
 } from "./spreadsheet.controller.js";
 import { protect } from "../../middleware/auth.js";
 import { checkSheetPermission } from "../../middleware/rbac.js";
@@ -22,6 +22,7 @@ router.use(protect());
 
 // Spreadsheet List & CRUD
 router.get("/", listSheets); // Unified listing
+router.get("/invoice-search", searchInvoiceSheets);
 router.get("/shared", getSharedWithMe);
 router.patch("/:id/move-shared", moveSharedItem);
 router.post("/", validate(schemas.createSheet), createSheet);

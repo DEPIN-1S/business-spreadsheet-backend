@@ -1,5 +1,6 @@
 import "express-async-errors";
 import express from "express";
+import fs from "fs";
 import path from "path";
 import cors from "cors";
 import helmet from "helmet";
@@ -62,7 +63,13 @@ if (process.env.NODE_ENV === "production") {
         max: 500,
         standardHeaders: true,
         legacyHeaders: false,
-        message: { error: "Too many requests, please try again later." }
+        message: { error: "Too many requests, please try again later.", message: "Too many requests. Wait a few minutes and try again." },
+        handler: (req, res, _next, options) => {
+            // #region agent log
+            try { fs.appendFileSync("/Users/depin/works/spreadsheet/.cursor/debug-55a922.log", JSON.stringify({sessionId:"55a922",runId:"pre-fix",hypothesisId:"E",location:"app.js:rateLimit",message:"rate limit rejected",data:{method:req.method,path:req.originalUrl?.split("?")[0]||req.path},timestamp:Date.now()}) + "\n"); } catch { /* ignore */ }
+            // #endregion
+            res.status(options.statusCode).send(options.message);
+        }
     }));
 }
 
@@ -70,7 +77,7 @@ if (process.env.NODE_ENV === "production") {
 app.use("/api/user/login", rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 20,
-    message: { error: "Too many login attempts. Try again in 15 minutes." }
+    message: { error: "Too many login attempts. Try again in 15 minutes.", message: "Too many login attempts. Try again in 15 minutes." }
 }));
 
 app.get("/", (req, res) => {

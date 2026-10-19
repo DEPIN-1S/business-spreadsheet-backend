@@ -1,9 +1,8 @@
-import path from "path";
-import fs from "fs";
 import MediaFile from "./media.model.js";
 import AppError from "../../utils/AppError.js";
 import { getFileType } from "../../middleware/upload.js";
 import { logAction } from "../../utils/auditLogger.js";
+import { deleteObject } from "../../services/r2.js";
 
 export const uploadMultipleFiles = async (req, res, next) => {
     try {
@@ -60,9 +59,9 @@ export const deleteFile = async (req, res, next) => {
     try {
         const media = await MediaFile.findByPk(req.params.id);
         if (!media) throw new AppError("File not found", 404);
-        // Delete physical file
-        const filePath = path.join(process.cwd(), media.fileUrl);
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        if (typeof media.fileUrl === "string" && media.fileUrl.startsWith("/uploads/")) {
+            await deleteObject(media.fileUrl.replace(/^\//, ""));
+        }
         await media.destroy();
         await logAction(req.user.id, "media", req.params.id, "delete", null, null, req);
         res.json({ message: "File deleted" });

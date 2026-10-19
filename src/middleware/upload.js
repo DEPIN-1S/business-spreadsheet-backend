@@ -1,29 +1,26 @@
 import multer from "multer";
 import path from "path";
-import fs from "fs";
 import AppError from "../utils/AppError.js";
+import { createR2Storage } from "../services/r2.js";
 
-const UPLOAD_ROOT = process.env.UPLOAD_DIR || "uploads";
 const MAX_MB = parseInt(process.env.MAX_FILE_SIZE_MB || "50");
 
-// Ensure sub-directories exist
-["images", "audio", "documents", "videos", "chat"].forEach(dir => {
-    const p = path.join(process.cwd(), UPLOAD_ROOT, dir);
-    if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
-});
+// Helper to derive fileType category from mimetype
+export function getFileType(mimeType) {
+    if (!mimeType) return "other";
+    if (mimeType.startsWith("image/")) return "image";
+    if (mimeType.startsWith("audio/")) return "audio";
+    if (mimeType.startsWith("video/")) return "video";
+    return "document";
+}
 
-const storage = multer.diskStorage({
-    destination(req, file, cb) {
-        const mime = file.mimetype;
-        let subDir = "documents";
-        if (mime.startsWith("image/")) subDir = "images";
-        else if (mime.startsWith("audio/")) subDir = "audio";
-        else if (mime.startsWith("video/")) subDir = "videos";
-        cb(null, path.join(process.cwd(), UPLOAD_ROOT, subDir));
-    },
+const storage = createR2Storage({
     filename(req, file, cb) {
         const ext = path.extname(file.originalname);
         cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+    },
+    key(req, file, filename) {
+        return `uploads/${getFileType(file.mimetype)}s/${filename}`;
     }
 });
 
@@ -48,14 +45,5 @@ export const upload = multer({
     fileFilter,
     limits: { fileSize: MAX_MB * 1024 * 1024 }
 });
-
-// Helper to derive fileType category from mimetype
-export function getFileType(mimeType) {
-    if (!mimeType) return "other";
-    if (mimeType.startsWith("image/")) return "image";
-    if (mimeType.startsWith("audio/")) return "audio";
-    if (mimeType.startsWith("video/")) return "video";
-    return "document";
-}
 
 export default upload;
