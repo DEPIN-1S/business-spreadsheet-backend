@@ -1,3 +1,4 @@
+import { getCache, setCache, delCache } from "../../config/redis.js";
 import { Op } from "sequelize";
 import Spreadsheet from "./spreadsheet.model.js";
 import Column from "./column.model.js";
@@ -1957,4 +1958,103 @@ export const toggleColumnLocked = async (req, res, next) => {
         await col.update({ isLocked: !col.isLocked });
         res.json({ data: { isLocked: col.isLocked }, message: `Column ${col.isLocked ? "locked" : "unlocked"}` });
     } catch (e) { next(e); }
+};
+
+export const searchProducts = async (req, res, next) => {
+    try {
+        const { q, query, search, sheetIds } = req.query;
+        const searchKeyword = (q || query || search || '').trim();
+        if (!searchKeyword) {
+            return res.status(200).json({ success: true, data: [] });
+        }
+
+        const userId = req.user.id;
+        const role = req.user.role;
+
+        // Check Redis cache first
+        const cacheKey = `prod_search:${role === 'superadmin' ? 'sa' : userId}:${encodeURIComponent(searchKeyword.toLowerCase())}:${sheetIds || 'all'}`;
+        const cached = await getCache(cacheKey);
+        if (cached) {
+            return res.status(200).json({ success: true, data: cached, fromCache: true });
+        }
+
+        // Determine accessible sheets
+        let targetSheetIds = [];
+        if (sheetIds) {
+            targetSheetIds = sheetIds.split(',').map(s => s.trim()).filter(Boolean);
+        } else {
+            if (role !== 'superadmin') {
+                const [owned, shared] = await Promise.all([
+                    Spreadsheet.findAll({ where: { createdBy: userId, isDeleted: false }, attributes: ['id'] }),
+                    SheetPermission.findAll({ where: { userId }, attributes: ['spreadsheetId'] })
+                ]);
+                const ids = new Set([
+                    ...owned.map(s => s.id),
+                    ...shared.map(s => s.spreadsheetId)
+                ]);
+                targetSheetIds = Array.from(ids);
+            } else {
+                const sheets = await Spreadsheet.findAll({ where: { isDeleted: false }, attributes: ['id'] });
+                targetSheetIds = sheets.map(s => s.id);
+            }
+        }
+
+        if (targetSheetIds.length === 0) {
+            await setCache(cacheKey, [], 180);
+            return res.status(200).json({ success: true, data: [] });
+        }
+
+        // Find matching cells
+        const escaped = searchKeyword.replace(/[%_\\]/g, '\\$&');
+        const [matchingCells] = await sequelize.query(`
+            SELECT c.rowId 
+            FROM cells c 
+            JOIN \`rows\` r ON c.rowId = r.id 
+            WHERE r.spreadsheetId IN (${targetSheetIds.map(id => `'${id}'`).join(',')}) 
+              AND r.isDeleted = false 
+              AND (c.computedValue LIKE :kw OR c.rawValue LIKE :kw) 
+            LIMIT 40;
+        `, {
+            replacements: { kw: `%${escaped}%` }
+        });
+
+        if (!matchingCells || matchingCells.length === 0) {
+            await setCache(cacheKey, [], 180);
+            return res.status(200).json({ success: true, data: [] });
+        }
+
+        const rowIds = Array.from(new Set(matchingCells.map(c => `'${c.rowId}'`))).join(',');
+        const [allCells] = await sequelize.query(`
+            SELECT c.rowId, col.name as colName, c.computedValue, c.rawValue 
+            FROM cells c 
+            JOIN columns col ON c.columnId = col.id 
+            WHERE c.rowId IN (${rowIds});
+        `);
+
+        // Group cells by rowId
+        const productMap = {};
+        allCells.forEach(cell => {
+            if (!productMap[cell.rowId]) productMap[cell.rowId] = {};
+            const name = (cell.colName || '').trim();
+            const upper = name.toUpperCase();
+            let key = name;
+            if (upper === 'GST%' || upper === 'GST') key = 'GST';
+            else if (upper === 'PRODUCT NAME' || upper === 'PRODUCT' || upper === 'ITEM NAME' || upper === 'ITEM') key = 'Product Name';
+            else if (upper === 'MRP') key = 'MRP';
+            else if (upper === 'DISCOUNT' || upper === 'DISC%' || upper === 'DISCOUNT%') key = 'Discount';
+            else if (upper === 'SELLING RATE' || upper === 'RATE' || upper === 'PRICE') key = 'Selling Rate';
+            else if (upper === 'IMAGE' || upper === 'PRODUCT IMAGE' || upper === 'IMG') key = 'Image';
+            else if (upper === 'COMPOSITION') key = 'Composition';
+            productMap[cell.rowId][key] = cell.computedValue || cell.rawValue || '';
+        });
+
+        const products = Object.values(productMap).filter(p => p['Product Name']);
+
+        // Cache in Redis for 10 minutes (600s)
+        await setCache(cacheKey, products, 600);
+
+        res.status(200).json({ success: true, data: products, fromCache: false });
+    } catch (err) {
+        next(err);
+    }
 };

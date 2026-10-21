@@ -1,3 +1,4 @@
+import { getCache, setCache, delCache } from "../../config/redis.js";
 import { Op } from 'sequelize';
 import Business from "./business.model.js";
 import SavedInvoice from "./saved_invoice.model.js";
@@ -290,7 +291,7 @@ export const listBusinessParties = async (req, res) => {
 export const addBusinessParty = async (req, res) => {
     try {
         const { id: businessId } = req.params;
-        const { id: partyIdParam, name, billingAddress, shippingAddress, contact, email, dlNo, gstin, pan, age, gender, place, additionalData } = req.body;
+        const { id: partyIdParam, name, billingAddress, shippingAddress, contact, email, dlNo, gstin, pan, age, gender, place, isCardioDiabetic, additionalData } = req.body;
         
         const business = await Business.findOne({
             where: { id: businessId, isDeleted: false },
@@ -318,6 +319,7 @@ export const addBusinessParty = async (req, res) => {
                     age, 
                     gender,
                     place: place !== undefined ? (place ? place.trim() : null) : existingParty.place,
+                    isCardioDiabetic: isCardioDiabetic !== undefined ? Boolean(isCardioDiabetic) : existingParty.isCardioDiabetic,
                     ageLastUpdatedYear: age ? currentYear : existingParty.ageLastUpdatedYear,
                     additionalData 
                 });
@@ -338,6 +340,7 @@ export const addBusinessParty = async (req, res) => {
             age, 
             gender,
             place: place ? place.trim() : null,
+            isCardioDiabetic: Boolean(isCardioDiabetic),
             ageLastUpdatedYear: age ? currentYear : null,
             additionalData 
         });
@@ -395,6 +398,7 @@ export const saveInvoice = async (req, res) => {
             isCb: payload.isCb !== undefined ? Boolean(payload.isCb) : false,
             createdBy: req.user.id
         });
+        await delCache(`biz_invoices:${businessId}:*`); // saveInvoice delCache
         const invoiceData = invoice.toJSON();
         if (typeof invoiceData.fullData === 'string') {
             try { invoiceData.fullData = JSON.parse(invoiceData.fullData); } catch (e) {}
@@ -429,6 +433,7 @@ export const updateSavedInvoice = async (req, res) => {
         if (typeof invoiceData.fullData === 'string') {
             try { invoiceData.fullData = JSON.parse(invoiceData.fullData); } catch (e) {}
         }
+        await delCache(`biz_invoices:${businessId}:*`); // updateSavedInvoice delCache
         res.status(200).json({ success: true, invoice: invoiceData });
     } catch (error) {
         console.error("Error updating saved invoice:", error);
@@ -438,8 +443,10 @@ export const updateSavedInvoice = async (req, res) => {
 
 export const toggleSavedInvoiceCb = async (req, res) => {
     try {
-        if (req.user?.role !== 'superadmin') {
-            return res.status(403).json({ success: false, message: "Forbidden – only Super Admin can toggle CB status" });
+        const role = req.user?.role;
+        const isAdmin = role === 'superadmin' || role === 'admin' || role === 'super_admin';
+        if (!isAdmin) {
+            return res.status(403).json({ success: false, message: "Forbidden – only Admin or Super Admin can toggle CB status" });
         }
         const { businessId, invoiceId } = req.params;
         const invoice = await SavedInvoice.findOne({ where: { id: invoiceId, businessId } });
@@ -448,6 +455,7 @@ export const toggleSavedInvoiceCb = async (req, res) => {
         }
         const newCb = req.body.isCb !== undefined ? Boolean(req.body.isCb) : !invoice.isCb;
         await invoice.update({ isCb: newCb });
+        await delCache(`biz_invoices:${businessId}:*`);
         const invoiceData = invoice.toJSON();
         if (typeof invoiceData.fullData === 'string') {
             try { invoiceData.fullData = JSON.parse(invoiceData.fullData); } catch (e) {}
@@ -462,17 +470,13 @@ export const toggleSavedInvoiceCb = async (req, res) => {
 export const getSavedInvoices = async (req, res) => {
     try {
         const { businessId } = req.params;
-        const isSuperAdmin = req.user && req.user.role === 'superadmin';
-
-        const whereClause = { businessId };
-        if (!isSuperAdmin) {
-            // For non-superadmin users (admin, staff, etc.), hide invoices where CB is applied
-            whereClause[Op.or] = [
-                { isCb: false },
-                { isCb: null }
-            ];
+        const cacheKey = `biz_invoices:${businessId}:all`;
+        const cached = await getCache(cacheKey);
+        if (cached) {
+            return res.status(200).json({ success: true, invoices: cached, fromCache: true });
         }
 
+        const whereClause = { businessId };
         const invoices = await SavedInvoice.findAll({
             where: whereClause,
             order: [['createdAt', 'DESC']]
@@ -484,6 +488,7 @@ export const getSavedInvoices = async (req, res) => {
             }
             return data;
         });
+        await setCache(cacheKey, parsedInvoices, 180);
         res.status(200).json({ success: true, invoices: parsedInvoices });
     } catch (error) {
         console.error("Error fetching saved invoices:", error);
@@ -495,6 +500,7 @@ export const deleteSavedInvoice = async (req, res) => {
     try {
         const { businessId, invoiceId } = req.params;
         await SavedInvoice.destroy({ where: { id: invoiceId, businessId } });
+        await delCache(`biz_invoices:${businessId}:*`);
         res.status(200).json({ success: true });
     } catch (error) {
         console.error("Error deleting saved invoice:", error);

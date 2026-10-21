@@ -1,6 +1,6 @@
 import express from "express";
 import {
-    listSheets, getSheetData, updateSheet,
+    listSheets, searchProducts, getSheetData, updateSheet,
     updateCell, addRow, deleteRow, reorderRow, updateRowColor, upsertCell, recalculateFormulas,
     bulkInsertRows,
     addColumn, updateColumn, deleteColumn,
@@ -23,6 +23,7 @@ router.use(protect());
 // Spreadsheet List & CRUD
 router.get("/", listSheets); // Unified listing
 router.get("/shared", getSharedWithMe);
+router.get("/products/search", searchProducts);
 router.patch("/:id/move-shared", moveSharedItem);
 router.post("/", validate(schemas.createSheet), createSheet);
 router.post("/import", importSheet);

@@ -31,7 +31,7 @@ router.delete("/:id/parties/:partyId", deleteBusinessParty);
 // Saved Invoices
 router.post("/:businessId/invoices", saveInvoice);
 router.put("/:businessId/invoices/:invoiceId", updateSavedInvoice);
-router.patch("/:businessId/invoices/:invoiceId/toggle-cb", protect(["superadmin"]), toggleSavedInvoiceCb);
+router.patch("/:businessId/invoices/:invoiceId/toggle-cb", protect(["superadmin", "admin"]), toggleSavedInvoiceCb);
 router.get("/:businessId/invoices", getSavedInvoices);
 router.delete("/:businessId/invoices/:invoiceId", deleteSavedInvoice);
 router.delete("/:businessId/invoices", clearSavedInvoices);
