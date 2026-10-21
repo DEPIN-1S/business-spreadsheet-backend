@@ -216,6 +216,106 @@ export const getSheetData = async (req, res, next) => {
 
 };
 
+async function userCanViewSheet(user, sheetId) {
+    if (!user) return false;
+    if (user.role === "superadmin") return true;
+    const direct = await SheetPermission.findOne({
+        where: { userId: user.id, spreadsheetId: sheetId, canView: true },
+        attributes: ["id"]
+    });
+    if (direct) return true;
+    const sheet = await Spreadsheet.findOne({
+        where: { id: sheetId, isDeleted: false },
+        attributes: ["id", "folderId", "createdBy"]
+    });
+    if (!sheet) return false;
+    if (sheet.createdBy === user.id) return true;
+    if (sheet.folderId) {
+        const folderPerm = await getInheritedPermission(user.id, sheet.folderId);
+        if (folderPerm) return true;
+    }
+    return false;
+}
+
+// One product search for every spreadsheet on a bill, instead of one HTTP call per sheet.
+export const searchInvoiceSheets = async (req, res, next) => {
+    try {
+        const search = String(req.query.search || "").trim().slice(0, 80);
+        const requestedIds = String(req.query.ids || "")
+            .split(",")
+            .map((id) => id.trim())
+            .filter((id) => /^[0-9a-f-]{36}$/i.test(id))
+            .slice(0, 80);
+
+        if (!search || requestedIds.length === 0) {
+            return res.json({ data: { grid: [] } });
+        }
+
+        const allowedIds = [];
+        for (const id of requestedIds) {
+            if (await userCanViewSheet(req.user, id)) allowedIds.push(id);
+        }
+        if (allowedIds.length === 0) {
+            return res.json({ data: { grid: [] } });
+        }
+
+        const columns = await Column.findAll({
+            where: { spreadsheetId: { [Op.in]: allowedIds }, isDeleted: false, isHidden: false },
+            attributes: ["id", "name"]
+        });
+        const colNameById = {};
+        columns.forEach((col) => { colNameById[col.id] = col.name; });
+        const colIds = columns.map((col) => col.id);
+
+        const rows = await Row.findAll({
+            where: { spreadsheetId: { [Op.in]: allowedIds }, isDeleted: false },
+            attributes: ["id"],
+            include: [{
+                model: Cell,
+                as: "cells",
+                attributes: [],
+                required: true,
+                where: {
+                    [Op.or]: [
+                        { rawValue: { [Op.like]: `%${search}%` } },
+                        { computedValue: { [Op.like]: `%${search}%` } },
+                        { formattedValue: { [Op.like]: `%${search}%` } }
+                    ]
+                }
+            }]
+        });
+
+        const seenRowIds = new Set();
+        const rowIds = [];
+        rows.forEach((row) => {
+            if (seenRowIds.has(row.id)) return;
+            seenRowIds.add(row.id);
+            rowIds.push(row.id);
+        });
+        const cells = rowIds.length && colIds.length
+            ? await Cell.findAll({
+                where: { rowId: { [Op.in]: rowIds }, columnId: { [Op.in]: colIds } },
+                attributes: ["rowId", "columnId", "rawValue", "computedValue", "formattedValue"]
+            })
+            : [];
+
+        const byRow = {};
+        cells.forEach((cell) => {
+            if (!byRow[cell.rowId]) byRow[cell.rowId] = [];
+            byRow[cell.rowId].push({
+                columnName: colNameById[cell.columnId] || "",
+                rawValue: cell.rawValue,
+                computedValue: cell.computedValue,
+                formattedValue: cell.formattedValue
+            });
+        });
+
+        res.json({ data: { grid: rowIds.map((id) => ({ id, cells: byRow[id] || [] })) } });
+    } catch (e) {
+        next(e);
+    }
+};
+
 // ── Update a cell (with formula recalc + socket emit) ────────────────────────
 export const updateCell = async (req, res, next) => {
     try {

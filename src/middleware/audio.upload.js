@@ -1,11 +1,7 @@
 import multer from "multer";
 import path from "path";
 import crypto from "crypto";
-import fs from "fs";
-
-// ── Ensure upload directories exist ─────────────────────────────────────────
-const AUDIO_DIR = "uploads/audio";
-if (!fs.existsSync(AUDIO_DIR)) fs.mkdirSync(AUDIO_DIR, { recursive: true });
+import { createR2Storage } from "../services/r2.js";
 
 const ALLOWED_AUDIO_TYPES = [
     "audio/mpeg",        // .mp3
@@ -19,17 +15,17 @@ const ALLOWED_AUDIO_TYPES = [
 
 const ALLOWED_EXTENSIONS = [".mp3", ".wav", ".ogg", ".webm", ".m4a", ".aac"];
 
-// ── Storage configuration ────────────────────────────────────────────────────
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, AUDIO_DIR),
-    filename: (req, file, cb) => {
+const storage = createR2Storage({
+    filename(req, file, cb) {
         const unique = crypto.randomBytes(16).toString("hex");
         const ext = path.extname(file.originalname).toLowerCase() || ".webm";
         cb(null, `${unique}${ext}`);
+    },
+    key(req, file, filename) {
+        return `uploads/audio/${filename}`;
     }
 });
 
-// ── File type validation ─────────────────────────────────────────────────────
 const fileFilter = (req, file, cb) => {
     const mimeOk = ALLOWED_AUDIO_TYPES.includes(file.mimetype);
     const extOk = ALLOWED_EXTENSIONS.includes(path.extname(file.originalname).toLowerCase());
@@ -41,7 +37,6 @@ const fileFilter = (req, file, cb) => {
     }
 };
 
-// ── Export configured multer instance ────────────────────────────────────────
 export const audioUpload = multer({
     storage,
     fileFilter,
