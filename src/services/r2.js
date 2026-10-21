@@ -1,5 +1,6 @@
 import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import AppError from "../utils/AppError.js";
+import { prepareStoredBody } from "./prepareStoredFile.js";
 
 const REQUIRED_ENV = ["R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_ENDPOINT"];
 
@@ -77,14 +78,17 @@ export function createR2Storage({ filename, key }) {
                     return cb(nameErr);
                 }
 
-                const objectKey = key(req, file, name);
                 readStream(file.stream)
                     .then(async (body) => {
-                        await putObject(objectKey, body, file.mimetype);
+                        const prepared = await prepareStoredBody(file, name, body);
+                        file.mimetype = prepared.contentType;
+                        const objectKey = key(req, file, prepared.filename);
+                        await putObject(objectKey, prepared.body, prepared.contentType);
                         cb(null, {
-                            filename: name,
+                            filename: prepared.filename,
                             key: objectKey,
-                            size: body.length
+                            size: prepared.body.length,
+                            mimetype: prepared.contentType
                         });
                     })
                     .catch((err) => cb(err));
