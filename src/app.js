@@ -63,6 +63,7 @@ if (process.env.NODE_ENV === "production") {
         max: 500,
         standardHeaders: true,
         legacyHeaders: false,
+        skip: (req) => String(req.originalUrl || req.path || "").startsWith("/api/media"),
         message: { error: "Too many requests, please try again later.", message: "Too many requests. Wait a few minutes and try again." },
         handler: (req, res, _next, options) => {
             // #region agent log
@@ -91,6 +92,12 @@ app.use(express.urlencoded({ extended: true }));
 // ── Static file serving ───────────────────────────────────────────────────────
 const UPLOAD_ROOT = process.env.UPLOAD_DIR || "uploads";
 app.use("/uploads", express.static(path.join(process.cwd(), UPLOAD_ROOT)));
+app.use("/uploads", (req, res, next) => {
+    const r2Base = (process.env.R2_PUBLIC_URL || "https://pub-f0142185ae6c407ea518cb8b30b55497.r2.dev").replace(/\/$/, "");
+    if (!r2Base) return next();
+    const objectPath = req.originalUrl.startsWith("/") ? req.originalUrl : `/${req.originalUrl}`;
+    return res.redirect(302, `${r2Base}${objectPath}`);
+});
 app.use("/images", express.static(path.join(process.cwd(), "public/images")));
 app.use("/pdf", express.static(path.join(process.cwd(), "public/pdf")));
 app.use("/csv", express.static(path.join(process.cwd(), "public/csv")));

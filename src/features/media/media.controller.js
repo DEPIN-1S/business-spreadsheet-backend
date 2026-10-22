@@ -11,13 +11,14 @@ export const uploadMultipleFiles = async (req, res, next) => {
         const uploadedMedia = [];
         
         for (const file of req.files) {
-            const fileUrl = `/uploads/${getFileType(file.mimetype)}s/${file.filename}`;
+            const fileType = getFileType(file.mimetype, file.originalname);
+            const fileUrl = `/uploads/${fileType}s/${file.filename}`;
             const media = await MediaFile.create({
                 uploadedBy: req.user.id,
-                fileType: getFileType(file.mimetype),
-                mimeType: file.mimetype,
+                fileType,
+                mimeType: file.mimetype || null,
                 fileUrl,
-                originalName: file.originalname,
+                originalName: String(file.originalname || "upload").slice(0, 180),
                 sizeBytes: file.size
             });
             uploadedMedia.push(media);
@@ -32,14 +33,15 @@ export const uploadFile = async (req, res, next) => {
     try {
         if (!req.file) throw new AppError("No file uploaded", 400);
         const { cellId } = req.body;
-        const fileUrl = `/uploads/${getFileType(req.file.mimetype)}s/${req.file.filename}`;
+        const fileType = getFileType(req.file.mimetype, req.file.originalname);
+        const fileUrl = `/uploads/${fileType}s/${req.file.filename}`;
         const media = await MediaFile.create({
             cellId: cellId || null,
             uploadedBy: req.user.id,
-            fileType: getFileType(req.file.mimetype),
-            mimeType: req.file.mimetype,
+            fileType,
+            mimeType: req.file.mimetype || null,
             fileUrl,
-            originalName: req.file.originalname,
+            originalName: String(req.file.originalname || "upload").slice(0, 180),
             sizeBytes: req.file.size
         });
         await logAction(req.user.id, "media", media.id, "create", null, { fileUrl, originalName: req.file.originalname }, req);

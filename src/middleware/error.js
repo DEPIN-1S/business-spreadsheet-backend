@@ -25,8 +25,16 @@ export default (err, req, res, next)=>{
     statusCode=401; message="Token expired";
   }
 
-  if(err.code==="LIMIT_FILE_SIZE"){
-    statusCode=413; message="File too large";
+  if(err.code==="LIMIT_FILE_SIZE" || err.name==="MulterError" && err.code==="LIMIT_FILE_SIZE"){
+    statusCode=413; message="File too large. Max 50MB per file.";
+  } else if(err.name==="MulterError"){
+    statusCode=400;
+    message = err.code==="LIMIT_FILE_COUNT"
+      ? "Too many files. Upload up to 20 at a time."
+      : (err.message || "Upload failed");
+  } else if(/boundary|Unexpected end of form|Multipart/i.test(err.message||"")){
+    statusCode=400;
+    message="The photo did not reach the server. Try one smaller image.";
   }
 
   if(statusCode===500) logger.error(err.stack||err.message);

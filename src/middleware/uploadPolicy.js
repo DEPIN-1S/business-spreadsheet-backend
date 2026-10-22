@@ -13,6 +13,7 @@ const ALLOWED_MIME = new Set([
     "image/heif",
     "image/heic-sequence",
     "image/heif-sequence",
+    "image/avif",
     "audio/mpeg",
     "audio/wav",
     "audio/ogg",
@@ -42,6 +43,7 @@ const EXTENSION_WHEN_MIME_MISSING = new Set([
     ".heif",
     ".heics",
     ".heifs",
+    ".avif",
     ".pdf"
 ]);
 

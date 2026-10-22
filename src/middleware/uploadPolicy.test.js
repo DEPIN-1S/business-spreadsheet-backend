@@ -10,6 +10,8 @@ test("accepts phone photo types the camera roll actually sends", () => {
     assert.equal(isAllowedUpload("application/octet-stream", "scan.jpg"), true);
     assert.equal(isAllowedUpload("image/jpeg", "1000005795.jpg"), true);
     assert.equal(isAllowedUpload("image/jpg", "camera.jpg"), true);
+    assert.equal(isAllowedUpload("image/avif", "photo.avif"), true);
+    assert.equal(isAllowedUpload("", "photo.avif"), true);
 });
 
 test("still rejects unknown uploads", () => {
