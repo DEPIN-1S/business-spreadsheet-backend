@@ -7,6 +7,7 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 
 import responseFormatter from "./middleware/responseFormatter.js";
+import { openObject, uploadObjectKey } from "./services/r2.js";
 import errorHandler from "./middleware/error.js";
 import "./config/associations.js";
 
@@ -92,11 +93,39 @@ app.use(express.urlencoded({ extended: true }));
 // ── Static file serving ───────────────────────────────────────────────────────
 const UPLOAD_ROOT = process.env.UPLOAD_DIR || "uploads";
 app.use("/uploads", express.static(path.join(process.cwd(), UPLOAD_ROOT)));
-app.use("/uploads", (req, res, next) => {
-    const r2Base = (process.env.R2_PUBLIC_URL || "https://pub-f0142185ae6c407ea518cb8b30b55497.r2.dev").replace(/\/$/, "");
-    if (!r2Base) return next();
-    const objectPath = req.originalUrl.startsWith("/") ? req.originalUrl : `/${req.originalUrl}`;
-    return res.redirect(302, `${r2Base}${objectPath}`);
+app.use("/uploads", async (req, res, next) => {
+    const key = uploadObjectKey(req.originalUrl);
+    if (!key) return next();
+    try {
+        const object = await openObject(key);
+        res.setHeader("Content-Type", object.ContentType || "application/octet-stream");
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+        if (object.ContentLength != null) {
+            res.setHeader("Content-Length", String(object.ContentLength));
+        }
+        const body = object.Body;
+        if (body && typeof body.pipe === "function") {
+            body.on("error", () => {
+                if (!res.headersSent) res.status(502);
+                res.end();
+            });
+            body.pipe(res);
+            return;
+        }
+        if (body && typeof body.transformToByteArray === "function") {
+            const bytes = await body.transformToByteArray();
+            res.end(Buffer.from(bytes));
+            return;
+        }
+        return next();
+    } catch (err) {
+        const status = err?.$metadata?.httpStatusCode;
+        if (err?.name === "NoSuchKey" || err?.name === "NotFound" || err?.Code === "NoSuchKey" || status === 404) {
+            return res.status(404).end();
+        }
+        return next(err);
+    }
 });
 app.use("/images", express.static(path.join(process.cwd(), "public/images")));
 app.use("/pdf", express.static(path.join(process.cwd(), "public/pdf")));

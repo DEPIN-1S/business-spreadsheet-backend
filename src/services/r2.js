@@ -1,4 +1,4 @@
-import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import AppError from "../utils/AppError.js";
 import { prepareStoredBody } from "./prepareStoredFile.js";
 
@@ -48,6 +48,26 @@ export async function putObject(key, body, contentType) {
 export async function deleteObject(key) {
     const { client: s3, bucket } = getClient();
     await s3.send(new DeleteObjectCommand({
+        Bucket: bucket,
+        Key: key
+    }));
+}
+
+export function uploadObjectKey(originalUrl) {
+    let pathOnly;
+    try {
+        pathOnly = decodeURIComponent(String(originalUrl || "").split("?")[0]);
+    } catch {
+        return null;
+    }
+    if (!pathOnly.startsWith("/uploads/")) return null;
+    if (pathOnly.includes("\0") || pathOnly.split("/").includes("..")) return null;
+    return pathOnly.slice(1);
+}
+
+export async function openObject(key) {
+    const { client: s3, bucket } = getClient();
+    return s3.send(new GetObjectCommand({
         Bucket: bucket,
         Key: key
     }));
